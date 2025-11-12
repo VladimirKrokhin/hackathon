@@ -4,6 +4,7 @@ from typing import Dict
 
 logger = logging.getLogger(__name__)
 
+
 class ResponseProcessor:
     def process_response(self, response: Dict) -> str:
         """
@@ -32,8 +33,9 @@ class ResponseProcessor:
         except Exception as e:
             logger.error(f"Ошибка при обработке ответа: {e}")
             raise
-    
-    def _minimal_post_process(self, text: str) -> str:
+
+    @staticmethod
+    def _minimal_post_process(text: str) -> str:
         """
         Минимальная постобработка текста:
         - Убираем лишние инструкции
