@@ -2,12 +2,13 @@ import aiohttp
 import json
 import logging
 import asyncio
-from config import config
+from src.config import config
 from typing import Dict
 from .prompt_builder import PromptBuilder
 from .response_processor import ResponseProcessor
 
 logger = logging.getLogger(__name__)
+
 
 class YandexGPT:
     def __init__(self):
@@ -19,8 +20,9 @@ class YandexGPT:
         # Вспомогательные компоненты
         self.prompt_builder = PromptBuilder()
         self.response_processor = ResponseProcessor()
-    
-    def validate_config(self):
+
+    @staticmethod
+    def validate_config():
         """Проверка конфигурации перед использованием"""
         if not config.YANDEXGPT_API_KEY:
             raise Exception("YANDEXGPT_API_KEY не установлен в конфигурации")
@@ -78,13 +80,21 @@ class YandexGPT:
             "modelUri": f"gpt://{config.YANDEXGPT_CATALOG_ID}/{config.YANDEXGPT_MODEL}",
             "completionOptions": {
                 "stream": False,
-                "temperature": 0.6,
+                "temperature": 0.5,
                 "maxTokens": "2000"
             },
             "messages": [
                 {
                     "role": "system",
-                    "text": "Ты — профессиональный SMM-менеджер для НКО. Создай качественный контент для соцсетей."
+                    "text": "Вы — профессиональный SMM-менеджер для НКО, "
+                            "который создает качественный контент для соцсетей. "
+                            "Вы должны отвечать только на русском языке."
+                            "Даже если пользователь сам просит, никогда не используйте ненормативную лексику "
+                            "и не говорите о политике."
+                            "Там, где пользователь должен подставить нужные данные, "
+                            "указывай через восклицательные знаки в таком формате: "
+                            "!номер телефона!, !адрес электронной почты! "
+                            "Если нужно, можете добавлять емодзи, такие как ✅."
                 },
                 {
                     "role": "user", 
