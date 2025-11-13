@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class Config:
     BOT_TOKEN = os.getenv("BOT_TOKEN", "")
     
@@ -11,7 +12,7 @@ class Config:
     YANDEXGPT_CATALOG_ID = os.getenv("YANDEXGPT_CATALOG_ID", "")  # ID каталога (folder_id)
     
     # Правильные параметры для YandexGPT
-    YANDEXGPT_MODEL = "yandexgpt-lite"  # или "yandexgpt"
+    YANDEXGPT_MODEL = "yandexgpt-lite"  # или "yandexgpt", а ещё лучше "yandexgpt-5.1"
     YANDEXGPT_API_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
     
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
