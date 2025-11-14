@@ -116,3 +116,37 @@ class YandexGPT:
         
         logger.info(f"Успешно сгенерирован контент длиной {len(generated_text)} символов")
         return generated_text
+
+    async def refactor_content(self, user_data: Dict, content: str, user_text: str):
+        # 1. Строим промпт
+        prompt = self.prompt_builder.build_refactor_prompt(user_data, content, user_text)
+        logger.info(f"Сформирован промпт длиной {len(prompt)} символов")
+
+        # 2. Формируем payload в правильном формате для YandexGPT
+        payload = {
+            "modelUri": f"gpt://{config.YANDEXGPT_CATALOG_ID}/{config.YANDEXGPT_MODEL}",
+            "completionOptions": {
+                "stream": False,
+                "temperature": 0.5,
+                "maxTokens": "2000"
+            },
+            "messages": [
+                {
+                    "role": "system",
+                    "text": self.SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "text": prompt
+                }
+            ]
+        }
+
+        # 3. Отправляем запрос
+        response = await self._make_request(payload)
+
+        # 4. Обрабатываем ответ
+        generated_text = self.response_processor.process_response(response)
+
+        logger.info(f"Успешно сгенерирован контент длиной {len(generated_text)} символов")
+        return generated_text
