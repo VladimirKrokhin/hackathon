@@ -1,28 +1,64 @@
+from abc import ABC, abstractmethod
+from typing import Dict, Union
+
+
 import logging
-from src.config import config
 import textwrap
-from typing import Dict, List, Union, Iterable
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, List, Mapping, Union
 
 logger = logging.getLogger(__name__)
 
 
-class PromptBuilder:
-    DEFAULT_GOAL = "общая поддержка НКО"
-    DEFAULT_AUDIENCE = ["молодежь"]
-    DEFAULT_PLATFORM = "соцсети"
-    DEFAULT_FORMAT = ["информационный контент"]
-    DEFAULT_VOLUME = "средний пост"
+@dataclass
+class PromptContext:
+    goal: str = ""
+    audience: list[str] = field(default_factory=list)
+    platform: str = ""
+    content_format: list[str] = field(default_factory=list)
+    volume: str = ""
+    event_details: dict[str, str] = field(default_factory=dict)
+    has_event: bool = False
 
-    def build_content_prompt(self, user_data: Dict, user_text: str) -> str:
-        (goal,
-         audience,
-         platform,
-         platform_requirements,
-         content_format,
-         volume,
-         event_details,
-         has_event,
-         audience_style) = self._extract_user_data(user_data)
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PromptContext":
+        return cls(
+            goal=data.get("goal", ""),
+            audience=data.get("audience", []),
+            platform=data.get("platform", ""),
+            content_format=data.get("format", []),
+            volume=data.get("volume", ""),
+            event_details=data.get("event_details", {}),
+            has_event=bool(data.get("has_event", False)),
+        )
+
+
+class AbstractPromptBuilder(ABC):
+    @abstractmethod
+    def build_text_content_prompt(self, user_data: PromptContext, user_text: str) -> str:
+        pass
+
+    @abstractmethod
+    def build_refactor_text_content_prompt(self, user_data: PromptContext, content: str, user_text: str) -> str:
+        pass
+
+class YandexGPTPromptBuilder(AbstractPromptBuilder):
+
+    def build_text_content_prompt(self, user_data: PromptContext, user_text: str) -> str:
+
+        goal = user_data.goal
+        audience_list = self._normalize_to_list(user_data.audience)
+        audience = ", ".join(audience_list)
+        platform = user_data.platform
+        content_format = ", ".join(
+            self._normalize_to_list(user_data.content_format)
+        )
+        volume = user_data.volume
+        event_details = user_data.event_details or ""
+        has_event = bool(user_data.has_event)
+
+        audience_style = self._get_audience_style(audience_list)
+        platform_requirements = self._get_platform_requirements(platform)
 
         sections = [
             "Выступай как профессиональный SMM-менеджер НКО.",
@@ -63,64 +99,51 @@ class PromptBuilder:
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
 
-    def build_refactor_prompt(self, user_data: Dict, content: str, user_text: str) -> str:
-        (goal,
-         audience,
-         platform,
-         platform_requirements,
-         content_format,
-         volume,
-         event_details,
-         has_event,
-         audience_style) = self._extract_user_data(user_data)
+    def build_refactor_text_content_prompt(self, user_data: PromptContext, content: str, user_text: str) -> str:
+        goal = user_data.goal
+        audience_list = self._normalize_to_list(user_data.audience)
+        audience = ", ".join(audience_list)
+        platform = user_data.platform
+        content_format = ", ".join(
+            self._normalize_to_list(user_data.content_format)
+        )
+        volume = user_data.volume
+        event_details = user_data.event_details or ""
+        has_event = bool(user_data.has_event)
+
+        audience_style = self._get_audience_style(audience_list)
+        platform_requirements = self._get_platform_requirements(platform)
 
         sections = [
+            "Выступай как профессиональный SMM-менеджер НКО.",
             f"Отредактируй пост в соответствии с данной просьбой: {user_text}",
-            "Общие данные о посте:"
+            "Общие данные о посте:",
             f"• Цель: {goal}",
             f"• Целевая аудитория: {audience}",
             f"• Платформа: {platform} ({platform_requirements})",
             f"• Формат: {content_format}",
             f"• Объем: {volume}",
-            f"• Стиль и тон: {audience_style}"
+            f"• Стиль и тон: {audience_style}",
         ]
 
         if has_event and event_details:
             sections.append("Контекст мероприятия:")
             sections.append(self._format_event_details(event_details))
 
+        sections.append("Дополнительные требования:")
+        sections.append("• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение.")
+        sections.append("• Фокусируйся на социальной миссии и помощи людям.")
+        sections.append("• Обязательно добавь контакты для связи и призыв к конкретному действию.")
+
+        sections.append("Вот пост, который нужно отредактировать:")
+        sections.append(content)
+
         sections.append(
-            f"Вот пост, который нужно отредактировать: {content}"
+            "Ответь только готовым текстом отредактированного поста, без дополнительных комментариев и пояснений."
         )
+
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
-
-    def _extract_user_data(self, user_data: Dict):
-        goal = user_data.get("goal", self.DEFAULT_GOAL)
-        audience_list = self._normalize_to_list(
-            user_data.get("audience", self.DEFAULT_AUDIENCE)
-        )
-        audience = ", ".join(audience_list)
-        platform = user_data.get("platform", self.DEFAULT_PLATFORM)
-        content_format = ", ".join(
-            self._normalize_to_list(user_data.get("format", self.DEFAULT_FORMAT))
-        )
-        volume = user_data.get("volume", self.DEFAULT_VOLUME)
-        event_details = user_data.get("event_details", "")
-        has_event = bool(user_data.get("has_event", False))
-
-        audience_style = self._get_audience_style(audience_list)
-        platform_requirements = self._get_platform_requirements(platform)
-
-        return (goal,
-                audience,
-                platform,
-                platform_requirements,
-                content_format,
-                volume,
-                event_details,
-                has_event,
-                audience_style)
 
 
     @staticmethod
@@ -176,10 +199,6 @@ class PromptBuilder:
             return (
                 "используй **жирный** для заголовков, --- для разделителей, 1–2 ключевых хештега, минимум эмодзи"
             )
-        if any(key in platform_lower for key in ("instagram", "инстаграм", "insta")):
-            return (
-                "короткие эмоциональные предложения, максимум 2200 символов, 5–10 релевантных хештегов"
-            )
         if any(key in platform_lower for key in ("сайт", "рассылка", "newsletter")):
             return "официальный стиль, полные предложения, без эмодзи"
         return "универсальные требования для соцсетей"
@@ -206,3 +225,5 @@ class PromptBuilder:
         ).strip()
 
         return f"{event_text}\n{template}"
+
+

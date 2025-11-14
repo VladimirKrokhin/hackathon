@@ -6,20 +6,21 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.enums.parse_mode import ParseMode
 
-from src.bot.states import ContentGeneration
-from src.bot.keyboards.inline import get_post_generation_keyboard
-from src.bot.utils import (
+from bot.states import ContentGeneration
+from bot.keyboards.inline import get_post_generation_keyboard
+from bot.utils import (
     get_caption_for_card_type,
     get_color_by_goal,
     get_secondary_color_by_goal,
     get_template_by_platform,
     get_title_by_goal,
-    get_demo_content,
 )
-from src.services.card_generation import card_generator
-from src.services.gpt import YandexGPT
+from bootstrap import get_content_generation_service
 
 generation_router = Router(name="generation")
+
+_content_generation_service = get_content_generation_service()
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,20 +37,15 @@ async def user_text_handler(message: Message, state: FSMContext):
 
     await message.answer("🧠 Генерирую контент с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
 
-    yandexgpt_client = YandexGPT()
     try:
-        generated_post = await yandexgpt_client.generate_content(data, user_text)
+        generated_post = await _content_generation_service.generate_content(data, user_text)
         await state.update_data(generated_post=generated_post)
     except Exception as error:
-        logger.exception("Ошибка при генерации текста через YandexGPT: %s", error)
-        generated_post = get_demo_content(goal)
+        logger.exception("Ошибка при генерации текста: %s", error)
         await message.answer(
-            "⚠️ Не удалось получить ответ от YandexGPT. Ниже приведён примерный текст, "
-            "который можно использовать и адаптировать под ваши задачи.",
+            "⚠️ Не удалось получить ответ."
         )
-
-    if not generated_post:
-        generated_post = get_demo_content(goal)
+        raise error
 
     await message.answer(
         f"✅ Ваш сгенерированный контент:",
@@ -101,10 +97,6 @@ async def user_text_handler(message: Message, state: FSMContext):
     except Exception as error:
         logger.exception("Ошибка при генерации карточек: %s", error)
         await message.answer(
-            "❌ Не удалось сформировать карточки.\n\n"
-            "Попробуйте:\n"
-            "• Перезапустить сценарий (/start)\n"
-            "• Выбрать другую платформу\n"
-            "• Упростить описание задачи",
-            parse_mode=None,
+            "❌ Не удалось сформировать карточки.",
         )
+        raise error

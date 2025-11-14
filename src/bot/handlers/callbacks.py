@@ -4,7 +4,7 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-from src.bot.handlers.start import start_handler
+from bot.handlers.start import start_handler
 
 callbacks_router = Router(name="callbacks")
 logger = logging.getLogger(__name__)
@@ -50,14 +50,6 @@ async def get_tips_handler(callback: CallbackQuery, state: FSMContext):
             "• Добавляйте разделители --- между секциями\n"
             "• Публикуйте 1–2 раза в неделю, чтобы не спамить\n"
             "• Используйте кнопки для призывов к действию"
-        ),
-        "📸 Instagram (визуальный контент)": (
-            "💡 Советы для Instagram:\n\n"
-            "• Публикуйте сторис ежедневно для поддержания активности\n"
-            "• Основные посты — 3–4 раза в неделю\n"
-            "• Используйте актуальные музыкальные треки в сторис\n"
-            "• Добавляйте геолокацию для локального охвата\n"
-            "• Отвечайте на личные сообщения в течение 24 часов"
         ),
     }
 

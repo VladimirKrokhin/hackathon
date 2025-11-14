@@ -1,14 +1,23 @@
-import logging
-import json
+from abc import ABC, abstractmethod
 from typing import Dict
+
+
+import logging
 
 logger = logging.getLogger(__name__)
 
-
-class ResponseProcessor:
+class AbstractResponseProcessor(ABC):
+    @abstractmethod
     def process_response(self, response: Dict) -> str:
         """
-        Обработка ответа от YandexGPT API
+        Обработка ответа от GPT
+        """
+        pass
+
+class YandexGPTResponseProcessor(AbstractResponseProcessor):
+    def process_response(self, response: Dict) -> str:
+        """
+        Обработка ответа от GPT
         """
         try:
             # Извлекаем текст из ответа
@@ -58,3 +67,5 @@ class ResponseProcessor:
         text = text.strip()
         
         return text
+
+

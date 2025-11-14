@@ -4,8 +4,8 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from src.bot.states import ContentGeneration
-from src.bot.keyboards.reply import (
+from bot.states import ContentGeneration
+from bot.keyboards.reply import (
     GOAL_OPTIONS,
     AUDIENCE_OPTIONS,
     PLATFORM_OPTIONS,
