@@ -38,7 +38,7 @@ async def user_text_handler(message: Message, state: FSMContext):
     await message.answer("🧠 Генерирую контент с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
 
     try:
-        generated_post = await _content_generation_service.generate_content(data, user_text)
+        generated_post = await _content_generation_service.generate_text_content(data, user_text)
         await state.update_data(generated_post=generated_post)
     except Exception as error:
         logger.exception("Ошибка при генерации текста: %s", error)
