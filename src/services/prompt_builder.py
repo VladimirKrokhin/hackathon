@@ -13,22 +13,16 @@ class PromptBuilder:
     DEFAULT_FORMAT = ["информационный контент"]
     DEFAULT_VOLUME = "средний пост"
 
-    def build_prompt(self, user_data: Dict, user_text: str) -> str:
-        goal = user_data.get("goal", self.DEFAULT_GOAL)
-        audience_list = self._normalize_to_list(
-            user_data.get("audience", self.DEFAULT_AUDIENCE)
-        )
-        audience = ", ".join(audience_list)
-        platform = user_data.get("platform", self.DEFAULT_PLATFORM)
-        content_format = ", ".join(
-            self._normalize_to_list(user_data.get("format", self.DEFAULT_FORMAT))
-        )
-        volume = user_data.get("volume", self.DEFAULT_VOLUME)
-        event_details = user_data.get("event_details", "")
-        has_event = bool(user_data.get("has_event", False))
-
-        audience_style = self._get_audience_style(audience_list)
-        platform_requirements = self._get_platform_requirements(platform)
+    def build_content_prompt(self, user_data: Dict, user_text: str) -> str:
+        (goal,
+         audience,
+         platform,
+         platform_requirements,
+         content_format,
+         volume,
+         event_details,
+         has_event,
+         audience_style) = self._extract_user_data(user_data)
 
         sections = [
             "Выступай как профессиональный SMM-менеджер НКО.",
@@ -68,6 +62,34 @@ class PromptBuilder:
 
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
+
+    def _extract_user_data(self, user_data: Dict):
+        goal = user_data.get("goal", self.DEFAULT_GOAL)
+        audience_list = self._normalize_to_list(
+            user_data.get("audience", self.DEFAULT_AUDIENCE)
+        )
+        audience = ", ".join(audience_list)
+        platform = user_data.get("platform", self.DEFAULT_PLATFORM)
+        content_format = ", ".join(
+            self._normalize_to_list(user_data.get("format", self.DEFAULT_FORMAT))
+        )
+        volume = user_data.get("volume", self.DEFAULT_VOLUME)
+        event_details = user_data.get("event_details", "")
+        has_event = bool(user_data.get("has_event", False))
+
+        audience_style = self._get_audience_style(audience_list)
+        platform_requirements = self._get_platform_requirements(platform)
+
+        return (goal,
+                audience,
+                platform,
+                platform_requirements,
+                content_format,
+                volume,
+                event_details,
+                has_event,
+                audience_style)
+
 
     @staticmethod
     def _normalize_to_list(value: Union[str, Iterable[str]]) -> List[str]:
