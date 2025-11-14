@@ -1,8 +1,16 @@
+import logging
+import os
+import aiofiles
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Dict, Tuple
 from playwright.async_api import Browser, Page
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from config import config
 
+TEMPLATES_DIR = Path("templates")
+
+logger = logging.getLogger(__name__)
 
 class BaseCardGenerator(ABC):
     """Общая функциональность генераторов карточек."""
@@ -17,9 +25,6 @@ class BaseCardGenerator(ABC):
         """Генерация карточки."""
         pass
 
-    async def load_template(self, template_name: str) -> str:
-        """Загрузка шаблона."""
-        pass
 
 
 
@@ -27,12 +32,17 @@ class PlaywrightCardGenerator(BaseCardGenerator):
     def __init__(self, browser: Browser):
         self.browser = browser
         
+        self.jinja_env = Environment(
+            loader=FileSystemLoader(TEMPLATES_DIR),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
 
     
     async def get_page(self) -> Page:
         """Получение новой страницы"""
         page = await self.browser.new_page()
         return page
+
     
     async def render_card(
         self,
@@ -47,25 +57,34 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             # Определяем размер
             width, height = size
             
-            # Загружаем шаблон
-            template = await self.load_template(template_name)
+            # 3. Определяем контекст (данные) для шаблона.
+            # Мы сохраняем логику значений по умолчанию из вашего
+            # старого .format(), чтобы ничего не сломалось.
+            defaults = {
+                'title': 'Контент от НКО',
+                'subtitle': '',
+                'content': '',
+                'footer': 'НКО',
+                'primary_color': '#667eea',
+                'secondary_color': '#764ba2',
+                'text_color': '#333',
+                'background_color': '#f5f7fa',
+                'org_name': 'НКО',
+                'contact_info': '',
+                'stats': [],
+                'cta_text': '',
+                'cta_link': '#'
+            }
             
-            # Формируем HTML с данными
-            html_content = template.format(
-                title=data.get('title', 'Контент от НКО'),
-                subtitle=data.get('subtitle', ''),
-                content=data.get('content', ''),
-                footer=data.get('footer', 'НКО'),
-                primary_color=data.get('primary_color', '#667eea'),
-                secondary_color=data.get('secondary_color', '#764ba2'),
-                text_color=data.get('text_color', '#333'),
-                background_color=data.get('background_color', '#f5f7fa'),
-                org_name=data.get('org_name', 'НКО'),
-                contact_info=data.get('contact_info', ''),
-                stats=data.get('stats', []),
-                cta_text=data.get('cta_text', ''),
-                cta_link=data.get('cta_link', '#')
-            )
+            # Данные из 'data' перезапишут значения по умолчанию
+            context = {**defaults, **data}
+
+            # 4. Получаем шаблон из окружения Jinja и рендерим его
+            template_filename = template_name + ".html"
+            template = self.jinja_env.get_template(template_filename)
+            
+            # .render() подставляет данные из 'context' в шаблон
+            html_content = template.render(context)
             
             # Рендерим страницу
             page = await self.get_page()
@@ -80,7 +99,7 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             # Делаем скриншот
             screenshot_bytes = await page.screenshot(
                 type='png',
-                quality=100,
+                # quality=100,
                 full_page=False
             )
             
@@ -89,8 +108,5 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             return screenshot_bytes
             
         except Exception as e:
-            print(f"Ошибка генерации карточки: {e}")
-            # Возвращаем fallback изображение
-            return await self.generate_fallback_card(str(e))
-    
-
+            logger.error(f"Ошибка генерации карточки: {e}")
+            raise

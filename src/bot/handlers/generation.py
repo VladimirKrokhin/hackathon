@@ -5,7 +5,9 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.enums.parse_mode import ParseMode
+from aiogram.types.input_file import BufferedInputFile
 
+from app import dp
 from bot.states import ContentGeneration
 from bot.keyboards.inline import get_post_generation_keyboard
 from bot.utils import (
@@ -15,11 +17,9 @@ from bot.utils import (
     get_template_by_platform,
     get_title_by_goal,
 )
-from bootstrap import get_content_generation_service
 
 generation_router = Router(name="generation")
 
-_content_generation_service = get_content_generation_service()
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ async def user_text_handler(message: Message, state: FSMContext):
     await message.answer("🧠 Генерирую контент с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
 
     try:
-        generated_post = await _content_generation_service.generate_text_content(data, user_text)
+        generated_post = await dp["content_generation_service"].generate_text_content(data, user_text)
         await state.update_data(generated_post=generated_post)
     except Exception as error:
         logger.exception("Ошибка при генерации текста: %s", error)
@@ -68,23 +68,22 @@ async def user_text_handler(message: Message, state: FSMContext):
         }
 
         template_name = get_template_by_platform(platform)
-        cards = await card_generator.generate_multiple_cards(
+        cards = await dp["card_generation_service"].generate_multiple_cards(
             template_name=template_name,
             data=template_data,
             platform=platform,
         )
 
         if not cards:
-            raise ValueError("Card generator returned an empty result")
+            raise ValueError("Генератор карточек ничего не вернул")
 
         await message.answer("🎨 Вот ваши карточки для соцсетей:")
 
         for card_type, image_bytes in cards.items():
             caption = get_caption_for_card_type(card_type, platform)
-            image_stream = io.BytesIO(image_bytes)
-            image_stream.name = f"{card_type}.png"
+            image_stream = image_bytes
             await message.answer_photo(
-                photo=image_stream,
+                photo=BufferedInputFile(image_stream, f"{card_type}.png"),
                 caption=caption,
             )
 
