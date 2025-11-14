@@ -41,12 +41,12 @@ class ApiGPT(AbstractGPT, metaclass=ABCMeta):
 
 
     @abstractmethod
-    def build_payload(self, prompt: str) -> Dict:
+    def build_payload(self, prompt: str, system_prompt: str) -> Dict:
         """Собирает payload для конкретного запроса."""
         pass
 
-    async def generate(self, prompt: str) -> Dict:
-        payload = self.build_payload(prompt)
+    async def generate(self, prompt: str, system_prompt) -> Dict:
+        payload = self.build_payload(prompt, system_prompt)
         response = await self._make_request(payload)
         logger.info("Сырой ответ от модели получен")
         return response
@@ -97,6 +97,7 @@ def get_yandexgpt_headers(api_key) -> Dict[str, str]:
     }
 
 class YandexGPT(ApiGPT):
+
     def __init__(self):
         super().__init__(
             api_url=config.YANDEXGPT_API_URL,
@@ -109,7 +110,7 @@ class YandexGPT(ApiGPT):
         return f"YandexGPT ({config.YANDEXGPT_MODEL})"
 
 
-    def build_payload(self, prompt: str) -> Dict:
+    def build_payload(self, prompt: str, system_prompt: str) -> Dict:
         return {
             "modelUri": f"gpt://{config.YANDEXGPT_CATALOG_ID}/{config.YANDEXGPT_MODEL}",
             "completionOptions": {
@@ -120,7 +121,7 @@ class YandexGPT(ApiGPT):
             "messages": [
                 {
                     "role": "system",
-                    "text": config.YANDEXGPT_SYSTEM_PROMPT,
+                    "text": system_prompt,
                 },
                 {
                     "role": "user",

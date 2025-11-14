@@ -35,12 +35,16 @@ class PromptContext:
 
 class AbstractPromptBuilder(ABC):
     @abstractmethod
-    def build_prompt(self, user_data: PromptContext, user_text: str) -> str:
+    def build_text_content_prompt(self, user_data: PromptContext, user_text: str) -> str:
         pass
 
-class YandexGPTPromptBuilder:
+    @abstractmethod
+    def build_refactor_text_content_prompt(self, user_data: PromptContext, content: str, user_text: str) -> str:
+        pass
 
-    def build_prompt(self, user_data: PromptContext, user_text: str) -> str:
+class YandexGPTPromptBuilder(AbstractPromptBuilder):
+
+    def build_text_content_prompt(self, user_data: PromptContext, user_text: str) -> str:
 
         goal = user_data.goal
         audience_list = self._normalize_to_list(user_data.audience)
@@ -94,6 +98,53 @@ class YandexGPTPromptBuilder:
 
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
+
+    def build_refactor_text_content_prompt(self, user_data: PromptContext, content: str, user_text: str) -> str:
+        goal = user_data.goal
+        audience_list = self._normalize_to_list(user_data.audience)
+        audience = ", ".join(audience_list)
+        platform = user_data.platform
+        content_format = ", ".join(
+            self._normalize_to_list(user_data.content_format)
+        )
+        volume = user_data.volume
+        event_details = user_data.event_details or ""
+        has_event = bool(user_data.has_event)
+
+        audience_style = self._get_audience_style(audience_list)
+        platform_requirements = self._get_platform_requirements(platform)
+
+        sections = [
+            "Выступай как профессиональный SMM-менеджер НКО.",
+            f"Отредактируй пост в соответствии с данной просьбой: {user_text}",
+            "Общие данные о посте:",
+            f"• Цель: {goal}",
+            f"• Целевая аудитория: {audience}",
+            f"• Платформа: {platform} ({platform_requirements})",
+            f"• Формат: {content_format}",
+            f"• Объем: {volume}",
+            f"• Стиль и тон: {audience_style}",
+        ]
+
+        if has_event and event_details:
+            sections.append("Контекст мероприятия:")
+            sections.append(self._format_event_details(event_details))
+
+        sections.append("Дополнительные требования:")
+        sections.append("• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение.")
+        sections.append("• Фокусируйся на социальной миссии и помощи людям.")
+        sections.append("• Обязательно добавь контакты для связи и призыв к конкретному действию.")
+
+        sections.append("Вот пост, который нужно отредактировать:")
+        sections.append(content)
+
+        sections.append(
+            "Ответь только готовым текстом отредактированного поста, без дополнительных комментариев и пояснений."
+        )
+
+        prompt = "\n".join(sections)
+        return textwrap.dedent(prompt).strip()
+
 
     @staticmethod
     def _normalize_to_list(value: Union[str, Iterable[str]]) -> List[str]:

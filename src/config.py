@@ -19,20 +19,6 @@ class Config(BaseSettings):
     YANDEXGPT_MODEL: str = Field(default="yandexgpt-lite", env="YANDEXGPT_MODEL") # Модель из Yandex Cloud
     YANDEXGPT_TEMPERATURE: float = Field(default=0.5, env="YANDEXGPT_TEMPERATURE")
     YANDEXGPT_MAX_TOKENS: int = Field(default=2000, env="YANDEXGPT_MAX_TOKENS")
-    YANDEXGPT_SYSTEM_PROMPT: str = Field(
-        default=(
-            "Вы — профессиональный SMM-менеджер для НКО, "
-            "который создает качественный контент для соцсетей. "
-            "Вы должны отвечать только на русском языке."
-            "Даже если пользователь сам просит, никогда не используйте ненормативную лексику "
-            "и не говорите о политике."
-            "Там, где пользователь должен подставить нужные данные, "
-            "указывай через восклицательные знаки в таком формате: "
-            "!номер телефона!, !адрес электронной почты! "
-            "Если нужно, можете добавлять емодзи, такие как ✅."
-        ),
-        env="YANDEXGPT_SYSTEM_PROMPT",
-    )
     YANDEXGPT_API_URL: str = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
     # Режим отладки
