@@ -63,6 +63,38 @@ class PromptBuilder:
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
 
+    def build_refactor_prompt(self, user_data: Dict, content: str, user_text: str) -> str:
+        (goal,
+         audience,
+         platform,
+         platform_requirements,
+         content_format,
+         volume,
+         event_details,
+         has_event,
+         audience_style) = self._extract_user_data(user_data)
+
+        sections = [
+            f"Отредактируй пост в соответствии с данной просьбой: {user_text}",
+            "Общие данные о посте:"
+            f"• Цель: {goal}",
+            f"• Целевая аудитория: {audience}",
+            f"• Платформа: {platform} ({platform_requirements})",
+            f"• Формат: {content_format}",
+            f"• Объем: {volume}",
+            f"• Стиль и тон: {audience_style}"
+        ]
+
+        if has_event and event_details:
+            sections.append("Контекст мероприятия:")
+            sections.append(self._format_event_details(event_details))
+
+        sections.append(
+            f"Вот пост, который нужно отредактировать: {content}"
+        )
+        prompt = "\n".join(sections)
+        return textwrap.dedent(prompt).strip()
+
     def _extract_user_data(self, user_data: Dict):
         goal = user_data.get("goal", self.DEFAULT_GOAL)
         audience_list = self._normalize_to_list(
