@@ -39,8 +39,9 @@ class AbstractPromptBuilder(ABC):
         pass
 
     @abstractmethod
-    def build_refactor_text_content_prompt(self, user_data: PromptContext, content: str, user_text: str) -> str:
+    def build_refactor_text_content_prompt(self, user_data: PromptContext, generated_post: str, user_text: str) -> str:
         pass
+
 
 class YandexGPTPromptBuilder(AbstractPromptBuilder):
 
@@ -99,7 +100,7 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
 
-    def build_refactor_text_content_prompt(self, user_data: PromptContext, content: str, user_text: str) -> str:
+    def build_refactor_text_content_prompt(self, user_data: PromptContext, generated_post: str, user_text: str) -> str:
         goal = user_data.goal
         audience_list = self._normalize_to_list(user_data.audience)
         audience = ", ".join(audience_list)
@@ -136,15 +137,13 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         sections.append("• Обязательно добавь контакты для связи и призыв к конкретному действию.")
 
         sections.append("Вот пост, который нужно отредактировать:")
-        sections.append(content)
+        sections.append(generated_post)
 
         sections.append(
             "Ответь только готовым текстом отредактированного поста, без дополнительных комментариев и пояснений."
         )
-
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
-
 
     @staticmethod
     def _normalize_to_list(value: Union[str, Iterable[str]]) -> List[str]:

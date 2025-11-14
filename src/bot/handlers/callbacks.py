@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot.handlers.start import start_handler
+from bot.states import ContentGeneration
 
 callbacks_router = Router(name="callbacks")
 logger = logging.getLogger(__name__)
@@ -71,3 +72,12 @@ async def get_tips_handler(callback: CallbackQuery, state: FSMContext):
             ]
         ),
     )
+
+
+@callbacks_router.callback_query(F.data == "refactor_content")
+async def refactor_content_handler(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        "✍️ Давайте отредактируем созданный текст!"
+        "Напишите, что бы вы хотели изменить:"
+    )
+    await state.set_state(ContentGeneration.waiting_for_refactoring_text)

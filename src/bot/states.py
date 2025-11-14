@@ -11,3 +11,4 @@ class ContentGeneration(StatesGroup):
     waiting_for_volume = State()
     waiting_for_user_text = State()
     waiting_for_confirmation = State()
+    waiting_for_refactoring_text = State()
