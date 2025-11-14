@@ -162,7 +162,7 @@ class PromptContext:
 
 **Метод:**
 ```python
-async def generate_content(
+async def generate_text_content(
     user_data: Union[Dict, PromptContext], 
     user_text: str
 ) -> str
