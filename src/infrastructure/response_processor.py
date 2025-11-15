@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import json
+import re
 from typing import Dict
 
 
@@ -50,6 +51,7 @@ class YandexGPTResponseProcessor(AbstractResponseProcessor):
         Минимальная постобработка текста:
         - Убираем лишние инструкции
         - Фиксим форматирование
+        - Удаляем восклицательные знаки вокруг реальных данных (телефонов, email и т.д.)
         """
         # Убираем возможные инструкции в начале
         text = text.replace("### ОТВЕТ ###", "").replace("### ФОРМАТ ОТВЕТА ###", "")
@@ -60,12 +62,72 @@ class YandexGPTResponseProcessor(AbstractResponseProcessor):
         if "system" in text.lower() and "user" in text.lower():
             text = text.split("user")[-1].strip()
         
+        # Удаляем восклицательные знаки вокруг реальных данных
+        text = YandexGPTResponseProcessor._remove_exclamation_marks_around_data(text)
+        
         # Фиксим двойные переносы строк
         lines = [line.strip() for line in text.split("\n") if line.strip() != ""]
         text = "\n".join(lines)
         
         # Убираем лишние пробелы в начале и конце
         text = text.strip()
+        
+        return text
+
+    @staticmethod
+    def _remove_exclamation_marks_around_data(text: str) -> str:
+        """
+        Удаляет восклицательные знаки вокруг реальных данных:
+        - Телефоны (форматы: +7..., 8..., (xxx) xxx-xx-xx и т.д.)
+        - Email адреса
+        - URL адреса
+        - Другие реальные данные, которые не являются шаблонами
+        
+        ВАЖНО: Обрабатывает только полные паттерны !...! (с двумя восклицательными знаками).
+        Шаблоны (содержащие слова типа "номер телефона", "адрес электронной почты") сохраняются.
+        """
+        # Ключевые слова, которые указывают на шаблон (не реальные данные)
+        template_keywords = [
+            'номер', 'телефон', 'адрес', 'электронной', 'почты', 'email', 
+            'контакт', 'телефона', 'почта', 'email-адрес', 'email адрес'
+        ]
+        
+        def process_exclamation_pattern(match):
+            """
+            Обрабатывает паттерн !...! и решает, нужно ли убирать восклицательные знаки.
+            """
+            content = match.group(1).strip()
+            content_lower = content.lower()
+            
+            # Если содержит ключевые слова шаблона - это шаблон, оставляем как есть
+            if any(keyword in content_lower for keyword in template_keywords):
+                return match.group(0)  # Возвращаем !...! без изменений
+            
+            # Проверяем, является ли содержимое реальными данными
+            # Телефон: содержит только цифры, пробелы, дефисы, скобки, плюс
+            if re.match(r'^[+]?[0-9\s\-\(\)]{7,20}$', content):
+                return content  # Убираем восклицательные знаки
+            
+            # Email: содержит @ и точку
+            if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', content):
+                return content  # Убираем восклицательные знаки
+            
+            # URL: начинается с http:// или https://
+            if re.match(r'^https?://[^\s!]+$', content):
+                return content  # Убираем восклицательные знаки
+            
+            # Адрес: содержит ключевые слова адреса
+            if re.search(r'(ул\.|улица|д\.|дом|кв\.|квартира|г\.|город)', content_lower):
+                return content  # Убираем восклицательные знаки
+            
+            # Если содержит цифры или специальные символы (@, /, :), но не является шаблоном
+            # и не является явно реальными данными - оставляем как есть (на всякий случай)
+            # Это может быть что-то неопределенное, лучше не трогать
+            return match.group(0)
+        
+        # Обрабатываем только полные паттерны !...! (с двумя восклицательными знаками)
+        # Это гарантирует, что мы не трогаем одиночные восклицательные знаки
+        text = re.sub(r'!([^!]+)!', process_exclamation_pattern, text)
         
         return text
 
