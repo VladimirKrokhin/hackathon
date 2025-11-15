@@ -26,22 +26,20 @@ class BaseCardGenerator(ABC):
         pass
 
 
-
-
 class PlaywrightCardGenerator(BaseCardGenerator):
+    """
+    Генерирует карточки с помощью Playwright и Jinja2.
+    """
+
     def __init__(self, browser: Browser):
         self.browser = browser
         
+        # Настраиваем окружение Jinja2 для загрузки HTML-шаблонов
         self.jinja_env = Environment(
             loader=FileSystemLoader(TEMPLATES_DIR),
             autoescape=select_autoescape(['html', 'xml'])
         )
-
-    
-    async def get_page(self) -> Page:
-        """Получение новой страницы"""
-        page = await self.browser.new_page()
-        return page
+        logger.info(f"Jinja2 Environment настроен на {TEMPLATES_DIR.resolve()}")
 
     
     async def render_card(
@@ -51,15 +49,25 @@ class PlaywrightCardGenerator(BaseCardGenerator):
         size: Tuple[int, int],
     ) -> bytes:
         """
-        Генерация карточки с учетом платформы и типа
+        Генерация карточки в изолированном контексте.
         """
+        
+        context: BrowserContext | None = None
+        page: Page | None = None
+        
         try:
+            if not self.browser.is_connected():
+                logger.error("Браузер был отключен! Невозможно создать карточку.")
+                raise Exception("Browser is not connected. It might have crashed.")
+
+            context = await self.browser.new_context()
+            
+            page = await context.new_page()
+
             # Определяем размер
             width, height = size
             
-            # 3. Определяем контекст (данные) для шаблона.
-            # Мы сохраняем логику значений по умолчанию из вашего
-            # старого .format(), чтобы ничего не сломалось.
+            # Определяем данные (контекст) для Jinja-шаблона
             defaults = {
                 'title': 'Контент от НКО',
                 'subtitle': '',
@@ -77,36 +85,38 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             }
             
             # Данные из 'data' перезапишут значения по умолчанию
-            context = {**defaults, **data}
+            template_data = {**defaults, **data}
 
-            # 4. Получаем шаблон из окружения Jinja и рендерим его
+            # Получаем шаблон Jinja и рендерим его
             template_filename = template_name + ".html"
             template = self.jinja_env.get_template(template_filename)
+            html_content = template.render(template_data)
             
-            # .render() подставляет данные из 'context' в шаблон
-            html_content = template.render(context)
-            
-            # Рендерим страницу
-            page = await self.get_page()
+            # Рендерим HTML в Playwright
             await page.set_viewport_size({"width": width, "height": height})
             
-            # Устанавливаем контент
-            await page.set_content(html_content, timeout=config.PLAYWRIGHT_TIMEOUT)
+            # Устанавливаем контент. 
+            await page.set_content(html_content, wait_until="load")
             
-            # Добавляем задержку для полной загрузки стилей
-            await page.wait_for_timeout(1000)
+            await page.wait_for_load_state("networkidle")
+
             
             # Делаем скриншот
             screenshot_bytes = await page.screenshot(
                 type='png',
-                # quality=100,
                 full_page=False
             )
             
-            await page.close()
-            
+            logger.info(f"Успешно сгенерирован скриншот для {template_name}")
             return screenshot_bytes
             
         except Exception as e:
-            logger.error(f"Ошибка генерации карточки: {e}")
-            raise
+            logger.error(f"Ошибка генерации карточки '{template_name}': {e}")
+            raise # Пробрасываем ошибку выше, чтобы ее обработал хэндлер
+            
+        finally:
+            # Закрываем страницу и контекст, освобождая ресурсы.
+            if page:
+                await page.close()
+            if context:
+                await context.close()
