@@ -25,7 +25,9 @@ async def refactoring_text_handler(message: Message, state: FSMContext):
 
     generated_post = None
 
-    await message.answer("🧠 Преобразую контент...", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "🧠 Преобразую контент..."
+        )
 
     try:
         text_content_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
@@ -36,14 +38,20 @@ async def refactoring_text_handler(message: Message, state: FSMContext):
     except Exception as error:
         logger.exception("Ошибка при генерации текста: %s", error)
         await message.answer(
-            "⚠️ Не удалось получить ответ."
+            "⚠️ Не удалось получить ответ.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         raise error
 
     await message.answer(
         f"✅ Ваш сгенерированный контент:",
+        reply_markup=ReplyKeyboardRemove(),
     )
-    await message.answer(generated_post, parse_mode=ParseMode.MARKDOWN)
+    await message.answer(
+        generated_post,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
     await message.answer(
         "✨ Все материалы готовы к публикации! Что хотите сделать дальше?",

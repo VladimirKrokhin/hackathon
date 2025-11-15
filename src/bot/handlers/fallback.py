@@ -1,7 +1,7 @@
 from aiogram import Router
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 
-from bot.keyboards.reply import get_goal_keyboard
+from bot.keyboards.inline import get_goal_keyboard
 
 fallback_router = Router(name="fallback")
 
@@ -10,5 +10,5 @@ fallback_router = Router(name="fallback")
 async def fallback_handler(message: Message):
     await message.answer(
         "Я пока не понимаю эту команду. Нажмите /start или выберите цель из меню ниже, чтобы начать заново.",
-        reply_markup=get_goal_keyboard(),
+        reply_markup=ReplyKeyboardRemove(),
     )

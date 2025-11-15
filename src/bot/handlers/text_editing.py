@@ -8,10 +8,7 @@ from aiogram.enums.parse_mode import ParseMode
 
 from app import dp
 from bot.states import EditText
-from bot.keyboards.reply import (
-    get_skip_keyboard,
-    SKIP_OPTION,
-)
+from bot.keyboards.inline import get_skip_keyboard
 from services.content_generation import TextContentGenerationService
 
 
@@ -24,7 +21,8 @@ async def start_edit_text(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         "📝 Давайте отредактируем ваш текст!\n\n"
-        "Введите полностью текст, который нужно исправить."
+        "Введите полностью текст, который нужно исправить.",
+        reply_markup=ReplyKeyboardRemove(),
     )
 
     await state.set_state(EditText.waiting_for_text)
@@ -35,7 +33,8 @@ async def text_handler(message: Message, state: FSMContext):
     text_to_edit = message.text.strip()
     if not text_to_edit:
         await message.answer(
-            "Пожалуйста, напишите текст, который хотите исправить."
+            "Пожалуйста, напишите текст, который хотите исправить.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -51,13 +50,16 @@ async def text_handler(message: Message, state: FSMContext):
 @text_editing_router.message(EditText.waiting_for_details, F.text)
 async def details_handler(message: Message, state: FSMContext):
     details = message.text.strip()
-    if details == SKIP_OPTION:
+    if details == "⏩ Пропустить":
         details = ""
     await state.update_data(details=details)
 
     data = await state.get_data()
 
-    await message.answer("🧠 Генерирую контент-план...")
+    await message.answer(
+        "🧠 Генерирую контент-план...",
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
@@ -66,13 +68,19 @@ async def details_handler(message: Message, state: FSMContext):
     except Exception as error:
         logger.exception("Ошибка при редактировании текста: %s", error)
         await message.answer(
-            "⚠️ Не удалось получить ответ."
+            "⚠️ Не удалось получить ответ.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         raise error
 
     await message.answer(
         f"✅ Ваш отредактированный текст:",
+        reply_markup=ReplyKeyboardRemove(),
     )
-    await message.answer(generated_text, parse_mode=ParseMode.MARKDOWN)
+    await message.answer(
+        generated_text, 
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
     await state.clear()

@@ -49,7 +49,10 @@ async def complete_generation_handler(message: Message, state: FSMContext):
     
     generated_post = None
 
-    await message.answer("🧠 Генерирую контент...", reply_markup=ReplyKeyboardRemove())
+    await message.answer(
+        "🧠 Генерирую контент...",
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
@@ -58,17 +61,26 @@ async def complete_generation_handler(message: Message, state: FSMContext):
     except Exception as error:
         logger.exception("Ошибка при генерации текста: %s", error)
         await message.answer(
-            "⚠️ Не удалось получить ответ."
+            "⚠️ Не удалось получить ответ.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         raise error
 
     # Показываем сгенерированный пост
     await message.answer(
         f"✅ Ваш сгенерированный контент:",
+        reply_markup=ReplyKeyboardRemove(),
     )
-    await message.answer(generated_post, parse_mode=ParseMode.MARKDOWN)
+    await message.answer(
+        generated_post,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
-    await message.answer("🎨 Создаю информационные карточки...")
+    await message.answer(
+        "🎨 Создаю информационные карточки...",
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
     try:
         # Определяем подзаголовок в зависимости от режима
@@ -101,7 +113,10 @@ async def complete_generation_handler(message: Message, state: FSMContext):
         if not cards:
             raise ValueError("Генератор карточек ничего не вернул")
 
-        await message.answer("🎨 Вот ваши карточки для соцсетей:")
+        await message.answer(
+            "🎨 Вот ваши карточки для соцсетей:",
+            reply_markup=ReplyKeyboardRemove(),
+            )
 
         for card_type, image_bytes in cards.items():
             caption = get_caption_for_card_type(card_type, platform)
@@ -109,6 +124,7 @@ async def complete_generation_handler(message: Message, state: FSMContext):
             await message.answer_photo(
                 photo=BufferedInputFile(image_stream, f"{card_type}.png"),
                 caption=caption,
+                reply_markup=ReplyKeyboardRemove(),
             )
 
         await message.answer(
@@ -121,6 +137,7 @@ async def complete_generation_handler(message: Message, state: FSMContext):
         logger.exception("Ошибка при генерации карточек: %s", error)
         await message.answer(
             "❌ Не удалось сформировать карточки.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         raise error
 

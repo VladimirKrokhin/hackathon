@@ -5,6 +5,7 @@ class ContentGeneration(StatesGroup):
     # Режимы генерации
     waiting_for_generation_mode = State()
     waiting_for_ngo_info_choice = State()
+    waiting_for_goal = State()
     
     # Структурированная форма (новые вопросы)
     waiting_for_event_type = State()
@@ -36,7 +37,6 @@ class ContentPlan(StatesGroup):
 class EditText(StatesGroup):
     waiting_for_text = State()
     waiting_for_details = State()
-
 
 
 class NGOInfo(StatesGroup):

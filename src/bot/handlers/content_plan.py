@@ -8,17 +8,18 @@ from aiogram.enums.parse_mode import ParseMode
 
 from app import dp
 from bot.states import ContentPlan
-from bot.keyboards.reply import (
-    PERIOD_OPTIONS,
-    FREQUENCY_OPTIONS,
-    CUSTOM_OPTION,
-    SKIP_OPTION,
+from bot.keyboards.inline import (
     get_period_keyboard,
     get_frequency_keyboard,
     get_skip_keyboard,
 )
 from services.content_generation import TextContentGenerationService
 
+# Константы для контент-плана
+PERIOD_OPTIONS = ["3 дня", "Неделя", "Месяц"]
+FREQUENCY_OPTIONS = ["каждый день", "раз в два дня"]
+CUSTOM_OPTION = "🖊️ Свой вариант"
+SKIP_OPTION = "⏩ Пропустить"
 
 content_plan_router = Router(name="content_plan")
 logger = logging.getLogger(__name__)
@@ -65,7 +66,10 @@ async def period_handler(message: Message, state: FSMContext):
 async def custom_period_handler(message: Message, state: FSMContext):
     period = message.text.strip()
     if not period:
-        await message.answer("Пожалуйста, отправьте текст с вашим вариантом периода.")
+        await message.answer(
+            "Пожалуйста, отправьте текст с вашим вариантом периода.",
+            reply_markup=ReplyKeyboardRemove(),
+            )
         return
 
     await state.update_data(period=period)
@@ -108,7 +112,10 @@ async def frequency_handler(message: Message, state: FSMContext):
 async def custom_period_handler(message: Message, state: FSMContext):
     frequency = message.text.strip()
     if not frequency:
-        await message.answer("Пожалуйста, отправьте текст с вашим вариантом частоты публикаций.")
+        await message.answer(
+            "Пожалуйста, отправьте текст с вашим вариантом частоты публикаций.",
+            reply_markup=ReplyKeyboardRemove(),
+            )
         return
 
     await state.update_data(frequency=frequency)
@@ -135,13 +142,16 @@ async def themes_handler(message: Message, state: FSMContext):
 @content_plan_router.message(ContentPlan.waiting_for_details, F.text)
 async def details_handler(message: Message, state: FSMContext):
     details = message.text.strip()
-    if details == SKIP_OPTION:
+    if details == "⏩ Пропустить":
         details = ""
     await state.update_data(details=details)
 
     data = await state.get_data()
 
-    await message.answer("🧠 Генерирую контент-план...")
+    await message.answer(
+        "🧠 Генерирую контент-план...",
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
@@ -150,13 +160,19 @@ async def details_handler(message: Message, state: FSMContext):
     except Exception as error:
         logger.exception("Ошибка при генерации плана: %s", error)
         await message.answer(
-            "⚠️ Не удалось получить ответ."
+            "⚠️ Не удалось получить ответ.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         raise error
 
     await message.answer(
         f"✅ Ваш сгенерированный конетн-план:",
+        reply_markup=ReplyKeyboardRemove(),
     )
-    await message.answer(generated_plan, parse_mode=ParseMode.MARKDOWN)
+    await message.answer(
+        generated_plan,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardRemove(),
+        )
 
     await state.clear()

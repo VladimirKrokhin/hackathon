@@ -1,16 +1,15 @@
 import logging
 
 from aiogram import Router, F
+from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 
 from bot.states import ContentGeneration
-from bot.keyboards.reply import (
+from bot.keyboards.inline import (
     get_narrative_style_keyboard,
     get_platform_keyboard,
-    NARRATIVE_STYLES,
-    PLATFORM_OPTIONS,
-    YES_NO_OPTIONS
+    get_yes_no_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,14 +21,15 @@ new_generation_router = Router(name="new_generation")
 async def ngo_info_choice_handler(message: Message, state: FSMContext):
     """Обработчик выбора использования данных НКО."""
     answer = message.text.strip()
-    if answer not in YES_NO_OPTIONS:
+    
+    if answer not in ["✅ Да", "❌ Нет"]:
         await message.answer(
             "Пожалуйста, используйте кнопки «Да» или «Нет».",
             reply_markup=get_yes_no_keyboard(),
         )
         return
 
-    has_ngo = answer == YES_NO_OPTIONS[0]
+    has_ngo = answer == "✅ Да"
     data = await state.get_data()
     generation_mode = data.get("generation_mode", "structured")
 
@@ -51,7 +51,7 @@ async def ngo_info_choice_handler(message: Message, state: FSMContext):
         else:
             await message.answer(
                 "⚠️ Данные НКО не найдены. Продолжаем без данных НКО.",
-                reply_markup=ReplyKeyboardRemove()
+                reply_markup=ReplyKeyboardRemove(),
             )
             await state.update_data(has_ngo_info=False)
     else:
@@ -63,6 +63,8 @@ async def ngo_info_choice_handler(message: Message, state: FSMContext):
             "📝 Отлично! Начинаем структурированную форму.\n\n"
             "**Что за событие?**\n"
             "Опишите коротко, о каком событии будет пост.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentGeneration.waiting_for_event_type)
     else:  # free_form
@@ -70,6 +72,8 @@ async def ngo_info_choice_handler(message: Message, state: FSMContext):
             "💭 Понятно! Используем свободную форму.\n\n"
             "**Опишите ваш пост**\n"
             "Расскажите подробно, о чём будет пост, какую информацию нужно донести.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentGeneration.waiting_for_user_description)
 
@@ -85,6 +89,7 @@ async def event_type_handler(message: Message, state: FSMContext):
     if not event_type:
         await message.answer(
             "Пожалуйста, опишите событие.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -93,6 +98,8 @@ async def event_type_handler(message: Message, state: FSMContext):
     await message.answer(
         "📅 **Когда состоится событие?**\n"
         "Укажите дату и время проведения.",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_event_date)
 
@@ -104,6 +111,7 @@ async def event_date_handler(message: Message, state: FSMContext):
     if not event_date:
         await message.answer(
             "Пожалуйста, укажите дату и время.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -112,6 +120,8 @@ async def event_date_handler(message: Message, state: FSMContext):
     await message.answer(
         "📍 **Где состоится событие?**\n"
         "Укажите место проведения.",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_event_place)
 
@@ -123,6 +133,7 @@ async def event_place_handler(message: Message, state: FSMContext):
     if not event_place:
         await message.answer(
             "Пожалуйста, укажите место проведения.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -131,6 +142,8 @@ async def event_place_handler(message: Message, state: FSMContext):
     await message.answer(
         "👥 **Кто приглашен на событие?**\n"
         "Укажите целевую аудиторию (например: волонтеры, дети, родители, пенсионеры).",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_event_audience)
 
@@ -142,6 +155,7 @@ async def event_audience_handler(message: Message, state: FSMContext):
     if not event_audience:
         await message.answer(
             "Пожалуйста, укажите целевую аудиторию.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -150,6 +164,8 @@ async def event_audience_handler(message: Message, state: FSMContext):
     await message.answer(
         "📝 **Дополнительные детали**\n"
         "Расскажите подробнее о событии: что будет интересного, зачем нужно участие, какая польза для участников.",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_event_details)
 
@@ -164,6 +180,7 @@ async def event_details_handler(message: Message, state: FSMContext):
     await message.answer(
         "🎨 **Выберите стиль повествования поста**",
         reply_markup=get_narrative_style_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_narrative_style)
 
@@ -172,7 +189,15 @@ async def event_details_handler(message: Message, state: FSMContext):
 async def narrative_style_handler(message: Message, state: FSMContext):
     """Обработчик для стиля повествования."""
     style = message.text.strip()
-    if style not in NARRATIVE_STYLES:
+    
+    narrative_styles = [
+        "💬 Разговорный стиль",
+        "📋 Официально-деловой стиль", 
+        "🎨 Художественный стиль",
+        "🌟 Позитивный/мотивирующий стиль",
+    ]
+    
+    if style not in narrative_styles:
         await message.answer(
             "Пожалуйста, выберите стиль из списка.",
             reply_markup=get_narrative_style_keyboard(),
@@ -184,6 +209,7 @@ async def narrative_style_handler(message: Message, state: FSMContext):
     await message.answer(
         "📱 **На какой платформе будет публиковаться пост?**",
         reply_markup=get_platform_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_platform)
 
@@ -192,7 +218,14 @@ async def narrative_style_handler(message: Message, state: FSMContext):
 async def platform_handler(message: Message, state: FSMContext):
     """Обработчик для выбора платформы - завершение структурированной формы."""
     platform = message.text.strip()
-    if platform not in PLATFORM_OPTIONS:
+    
+    platform_options = [
+        "📱 ВКонтакте (для молодежи)",
+        "💬 Telegram (для взрослых/бизнеса)",
+        "📸 Instagram (визуальный контент)",
+    ]
+    
+    if platform not in platform_options:
         await message.answer(
             "Пожалуйста, выберите платформу из списка.",
             reply_markup=get_platform_keyboard(),
@@ -221,6 +254,7 @@ async def user_description_handler(message: Message, state: FSMContext):
     if not user_description:
         await message.answer(
             "Пожалуйста, опишите ваш пост.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -229,6 +263,7 @@ async def user_description_handler(message: Message, state: FSMContext):
     await message.answer(
         "🎨 **Выберите стиль повествования поста**",
         reply_markup=get_narrative_style_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_free_style)
 
@@ -237,7 +272,15 @@ async def user_description_handler(message: Message, state: FSMContext):
 async def free_style_handler(message: Message, state: FSMContext):
     """Обработчик для стиля повествования в свободной форме."""
     style = message.text.strip()
-    if style not in NARRATIVE_STYLES:
+    
+    narrative_styles = [
+        "💬 Разговорный стиль",
+        "📋 Официально-деловой стиль", 
+        "🎨 Художественный стиль",
+        "🌟 Позитивный/мотивирующий стиль",
+    ]
+    
+    if style not in narrative_styles:
         await message.answer(
             "Пожалуйста, выберите стиль из списка.",
             reply_markup=get_narrative_style_keyboard(),
@@ -249,9 +292,6 @@ async def free_style_handler(message: Message, state: FSMContext):
     await message.answer(
         "📱 **На какой платформе будет публиковаться пост?**",
         reply_markup=get_platform_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentGeneration.waiting_for_platform)
-
-
-# Импортируем get_yes_no_keyboard
-from bot.keyboards.reply import get_yes_no_keyboard

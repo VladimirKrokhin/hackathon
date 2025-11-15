@@ -4,17 +4,17 @@
 import logging
 
 from aiogram import Router, F
+from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from aiogram.filters import Command
 from app import dp
 
 from bot.states import NGOInfo, ContentGeneration
-from bot.keyboards.reply import (
+from bot.keyboards.inline import (
     get_goal_keyboard,
     get_ngo_main_keyboard,
     get_ngo_navigation_keyboard,
-    SKIP_OPTION,
 )
 
 ngo_info_router = Router(name="ngo_info")
@@ -43,7 +43,8 @@ async def ngo_command_handler(message: Message, state: FSMContext):
     # Если данных НКО нет, начинаем сбор
     await message.answer(
         "🏢 Отлично! Давайте заполним информацию о вашей НКО.\n\n"
-        "Это поможет мне создавать персонализированный контент с упоминанием вашей организации.",
+        "Это поможет мне создавать персонализированный контент с упоминанием вашей организации.\n\n"
+        "Укажите наименование НКО:",
         reply_markup=get_ngo_navigation_keyboard(),
     )
     await state.set_state(NGOInfo.waiting_for_ngo_name)
@@ -176,6 +177,7 @@ async def ngo_contact_handler(message: Message, state: FSMContext):
     await message.answer(
         summary,
         reply_markup=get_ngo_navigation_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
 
@@ -266,8 +268,9 @@ async def view_ngo_info_handler(message: Message, state: FSMContext):
         return
     
     await message.answer(
-        summary + "Выберите действие:",
+        summary + "\n\nВыберите действие:",
         reply_markup=get_ngo_main_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
 
