@@ -7,5 +7,6 @@ def get_post_generation_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🔄 Создать ещё", callback_data="create_again")],
             [InlineKeyboardButton(text="💡 Советы по продвижению", callback_data="get_tips")],
             [InlineKeyboardButton(text="📤 Экспортировать все", callback_data="export_all")],
+            [InlineKeyboardButton(text="✏️ Переработать текст", callback_data="refactor_content")]
         ]
     )

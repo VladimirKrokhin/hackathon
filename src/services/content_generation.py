@@ -60,7 +60,7 @@ class ContentGenerationService:
     async def refactor_text_content(
         self,
         user_data: Union[Dict, PromptContext],
-        content: str,
+        generated_post: str,
         user_text: str,
     ) -> str:
         """Редактирование существующего контента по запросу пользователя."""
@@ -72,7 +72,7 @@ class ContentGenerationService:
         logger.info(f"Редактирование контента для цели: {context.goal}")
 
         prompt = self.prompt_builder.build_refactor_text_content_prompt(
-            context, content, user_text
+            context, generated_post, user_text
         )
         logger.info(f"Сформирован промпт для редактирования длиной {len(prompt)} символов")
 
