@@ -106,3 +106,52 @@ async def cancel_handler(message: Message, state: FSMContext):
         "❎ Текущий сценарий сброшен.\n\nЧто вы хотите сделать?",
         reply_markup=get_main_menu_keyboard(),
     )
+    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
+
+
+@start_router.message(F.text == "💭 Создать контент (свободная форма)")
+async def free_form_content_handler(message: Message, state: FSMContext):
+    """Обработчик для создания контента в свободной форме."""
+    await state.clear()
+    await state.update_data(generation_mode="free_form", has_ngo_info=False)
+    
+    await message.answer(
+        "💭 Понятно! Используем свободную форму создания.\n\n"
+        "Для создания персонализированного контента с данными НКО - выберите 'Да'.\n"
+        "Или продолжите без данных НКО - выберите 'Нет'.",
+        reply_markup=get_yes_no_keyboard(),
+    )
+    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
+
+
+@start_router.message(F.text == "✏️ Редактировать контент")
+async def edit_text_handler(message: Message, state: FSMContext):
+    """Обработчик для создания контента в свободной форме."""
+    await state.clear()
+    await state.update_data(edit_text=True, has_ngo_info=False)
+
+    await message.answer(
+        "✏️ Хорошо! Редактируем исходный текст.\n\n"
+        "Для создания персонализированного контента с данными НКО - выберите 'Да'.\n"
+        "Или продолжите без данных НКО - выберите 'Нет'.",
+        reply_markup=get_yes_no_keyboard(),
+    )
+    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
+
+
+@start_router.message(F.text == "📋 Посмотреть мою НКО")
+async def view_ngo_handler(message: Message, state: FSMContext):
+    """Обработчик для просмотра информации об НКО."""
+    from bot.handlers.ngo_info import view_ngo_info_handler as view_handler
+    await view_handler(message, state)
+
+
+@start_router.message(F.text == "🔄 Обновить данные НКО")
+async def update_ngo_handler(message: Message, state: FSMContext):
+    """Обработчик для обновления данных НКО."""
+    from bot.handlers.ngo_info import update_ngo_info_handler as update_handler
+    await update_handler(message, state)
+
+
+# Дополнительные импорты для кнопок yes/no
+from bot.keyboards.reply import get_yes_no_keyboard
