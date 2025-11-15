@@ -8,6 +8,7 @@ from aiogram.enums.parse_mode import ParseMode
 from app import dp
 from bot.states import ContentGeneration
 from bot.keyboards.inline import get_post_generation_keyboard
+from services.content_generation import TextContentGenerationService
 
 refactoring_router = Router(name="generation")
 
@@ -27,7 +28,8 @@ async def refactoring_text_handler(message: Message, state: FSMContext):
     await message.answer("🧠 Преобразую контент с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
 
     try:
-        generated_post = await dp["content_generation_service"].refactor_text_content(data,
+        text_content_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
+        generated_post = await text_content_generation_service.refactor_text_content(data,
                                                                                       content,
                                                                                       refactoring_text)
         await state.update_data(generated_post=generated_post)

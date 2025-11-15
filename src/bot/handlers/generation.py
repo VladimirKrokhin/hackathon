@@ -17,6 +17,7 @@ from bot.utils import (
     get_template_by_platform,
     get_title_by_goal,
 )
+from services.content_generation import TextContentGenerationService
 from services.card_generation import CardGenerationService
 
 generation_router = Router(name="generation")
@@ -39,7 +40,8 @@ async def user_text_handler(message: Message, state: FSMContext):
     await message.answer("🧠 Генерирую контент с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
 
     try:
-        generated_post = await dp["content_generation_service"].generate_text_content(data, user_text)
+        text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
+        generated_post = await text_generation_service.generate_text_content(data, user_text)
         await state.update_data(generated_post=generated_post)
     except Exception as error:
         logger.exception("Ошибка при генерации текста: %s", error)

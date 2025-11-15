@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 
-class ContentGenerationService:
+class TextContentGenerationService:
     """Cервис генерации текстового контента медиа."""
 
     SYSTEM_PROMPT = (
