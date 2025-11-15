@@ -26,11 +26,9 @@ async def init_browser() -> tuple[Browser, CoroutineType]:
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
-            "--single-process",
         ],
     )
     return (browser, playwright)
-
 
 async def close_browser(browser: Browser, playwright: CoroutineType) -> None:
     await browser.close()
