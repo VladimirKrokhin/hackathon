@@ -8,7 +8,7 @@ from typing import Dict, Optional, Tuple
 import aiohttp
 from aiohttp import FormData
 
-from src.config import config
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +330,7 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
 
 def create_fusion_brain_image_generator() -> FusionBrainImageGenerator:
     """Фабричная функция для создания генератора изображений Fusion Brain."""
-    from src.config import config
+    from config import config
     if not config.FUSION_BRAIN_API_KEY or not config.FUSION_BRAIN_SECRET_KEY:
         raise ValueError(
             "FUSION_BRAIN_API_KEY и FUSION_BRAIN_SECRET_KEY должны быть установлены в .env файле"

@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, Tuple
 
-from src.infrastructure.image_generation import AbstractImageGenerator
+from infrastructure.image_generation import AbstractImageGenerator
 
 logger = logging.getLogger(__name__)
 
