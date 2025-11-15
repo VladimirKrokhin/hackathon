@@ -22,19 +22,17 @@ from services.card_generation import CardGenerationService
 
 generation_router = Router(name="generation")
 
-
 logger = logging.getLogger(__name__)
 
 
-@generation_router.message(ContentGeneration.waiting_for_user_text, F.text)
-async def user_text_handler(message: Message, state: FSMContext):
-    user_text = message.text.strip()
-    await state.update_data(user_text=user_text)
+async def complete_generation_handler(message: Message, state: FSMContext):
+    """Универсальная функция завершения генерации контента."""
     data = await state.get_data()
-
-    goal = data.get("goal", "🎯 Привлечь волонтеров")
-    platform = data.get("platform", "выбранной платформы")
-    audience = data.get("audience", [])
+    user_text = data.get("user_text", "")
+    
+    # Определяем цель на основе данных
+    goal = data.get("goal", "🎯 Рассказать о мероприятии")
+    platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
     
     # Получаем информацию об НКО из базы данных
     ngo_service = dp["ngo_service"]
@@ -73,9 +71,15 @@ async def user_text_handler(message: Message, state: FSMContext):
     await message.answer("🎨 Создаю информационные карточки...")
 
     try:
+        # Определяем подзаголовок в зависимости от режима
+        if data.get("generation_mode") == "structured":
+            subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
+        else:
+            subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
+        
         template_data = {
             "title": get_title_by_goal(goal),
-            "subtitle": f"Для {', '.join(audience or ['наших подопечных'])}",
+            "subtitle": subtitle,
             "content": f"{generated_post[:250]}..." if len(generated_post) > 250 else generated_post,
             "org_name": ngo_name,
             "contact_info": ngo_contact,
@@ -119,3 +123,11 @@ async def user_text_handler(message: Message, state: FSMContext):
             "❌ Не удалось сформировать карточки.",
         )
         raise error
+
+
+# @generation_router.message(ContentGeneration.waiting_for_user_text, F.text)
+# async def user_text_handler(message: Message, state: FSMContext):
+#     """Обработчик для старого режима генерации (совместимость)."""
+#     user_text = message.text.strip()
+#     await state.update_data(user_text=user_text)
+#     await complete_generation_handler(message, state)

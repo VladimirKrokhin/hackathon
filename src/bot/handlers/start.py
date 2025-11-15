@@ -6,7 +6,11 @@ from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
 from bot.states import ContentGeneration, NGOInfo
-from bot.keyboards.reply import get_goal_keyboard, get_ngo_main_keyboard
+from bot.keyboards.reply import (
+    get_generation_mode_keyboard, 
+    get_ngo_main_keyboard,
+    GENERATION_MODES
+)
 from app import dp
 
 logger = logging.getLogger(__name__)
@@ -81,18 +85,34 @@ async def ngo_menu_handler(message: Message, state: FSMContext):
     await ngo_handler(message, state)
 
 
-@start_router.message(F.text == "✨ Создать контент без НКО")
-async def content_without_ngo_handler(message: Message, state: FSMContext):
-    """Обработчик для создания контента без информации об НКО."""
+@start_router.message(F.text == "📝 Создать контент (структурированная форма)")
+async def structured_content_handler(message: Message, state: FSMContext):
+    """Обработчик для создания контента в структурированной форме."""
     await state.clear()
-    await state.update_data(has_ngo_info=False)
+    await state.update_data(generation_mode="structured", has_ngo_info=False)
     
     await message.answer(
-        "✨ Понятно! Создаем контент без упоминания НКО.\n\n"
-        "Какова основная цель вашего поста?",
-        reply_markup=get_goal_keyboard(),
+        "📝 Отлично! Переходим к структурированной форме.\n\n"
+        "Для создания персонализированного контента с данными НКО - выберите 'Да'.\n"
+        "Или продолжите без данных НКО - выберите 'Нет'.",
+        reply_markup=get_yes_no_keyboard(),
     )
-    await state.set_state(ContentGeneration.waiting_for_goal)
+    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
+
+
+@start_router.message(F.text == "💭 Создать контент (свободная форма)")
+async def free_form_content_handler(message: Message, state: FSMContext):
+    """Обработчик для создания контента в свободной форме."""
+    await state.clear()
+    await state.update_data(generation_mode="free_form", has_ngo_info=False)
+    
+    await message.answer(
+        "💭 Понятно! Используем свободную форму создания.\n\n"
+        "Для создания персонализированного контента с данными НКО - выберите 'Да'.\n"
+        "Или продолжите без данных НКО - выберите 'Нет'.",
+        reply_markup=get_yes_no_keyboard(),
+    )
+    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
 
 
 @start_router.message(F.text == "📋 Посмотреть мою НКО")
@@ -107,3 +127,7 @@ async def update_ngo_handler(message: Message, state: FSMContext):
     """Обработчик для обновления данных НКО."""
     from bot.handlers.ngo_info import update_ngo_info_handler as update_handler
     await update_handler(message, state)
+
+
+# Дополнительные импорты для кнопок yes/no
+from bot.keyboards.reply import get_yes_no_keyboard

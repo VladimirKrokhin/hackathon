@@ -20,6 +20,13 @@ class PromptContext:
     event_details: dict[str, str] = field(default_factory=dict)
     has_event: bool = False
     
+    # Новые поля для структурированной формы
+    event_type: str = ""
+    event_date: str = ""
+    event_place: str = ""
+    event_audience: str = ""
+    narrative_style: str = ""
+    
     # Информация об НКО
     has_ngo_info: bool = False
     ngo_name: str = ""
@@ -37,6 +44,13 @@ class PromptContext:
             volume=data.get("volume", ""),
             event_details=data.get("event_details", {}),
             has_event=bool(data.get("has_event", False)),
+            # Новые поля
+            event_type=data.get("event_type", ""),
+            event_date=data.get("event_date", ""),
+            event_place=data.get("event_place", ""),
+            event_audience=data.get("event_audience", ""),
+            narrative_style=data.get("narrative_style", ""),
+            # НКО
             has_ngo_info=bool(data.get("has_ngo_info", False)),
             ngo_name=data.get("ngo_name", ""),
             ngo_description=data.get("ngo_description", ""),
@@ -75,67 +89,49 @@ class AbstractPromptBuilder(ABC):
 class YandexGPTPromptBuilder(AbstractPromptBuilder):
 
     def build_text_content_prompt(self, user_data: PromptContext, user_text: str) -> str:
-
-        goal = user_data.goal
-        audience_list = self._normalize_to_list(user_data.audience)
-        audience = ", ".join(audience_list)
-        platform = user_data.platform
-        content_format = ", ".join(
-            self._normalize_to_list(user_data.content_format)
-        )
-        volume = user_data.volume
-        event_details = user_data.event_details or ""
-        has_event = bool(user_data.has_event)
+        sections = []
         
-        # Информация об НКО
-        has_ngo_info = bool(user_data.has_ngo_info)
-        ngo_name = user_data.ngo_name
-        ngo_description = user_data.ngo_description
-        ngo_activities = user_data.ngo_activities
-        ngo_contact = user_data.ngo_contact
+        # Определяем стиль повествования
+        narrative_style = self._get_narrative_style(user_data.narrative_style)
+        sections.append(f"Стиль повествования: {narrative_style}")
 
-        audience_style = self._get_audience_style(audience_list)
-        platform_requirements = self._get_platform_requirements(platform)
+        # Если есть данные структурированной формы
+        if user_data.event_type or user_data.event_date:
+            sections.extend([
+                "Используй структурированные данные для создания поста:",
+                f"• Событие: {user_data.event_type}",
+                f"• Дата и время: {user_data.event_date}",
+                f"• Место: {user_data.event_place}",
+                f"• Целевая аудитория: {user_data.event_audience}",
+                f"• Дополнительные детали: {user_data.event_details}",
+            ])
+        else:
+            # Используем пользовательское описание
+            sections.append("Информация от пользователя:")
+            sections.append(user_text.strip())
 
-        sections = [
-            "Выступай как профессиональный SMM-менеджер НКО.",
-            "Подготовь пост в соответствии с данными параметрами:",
-            f"• Цель: {goal}",
-            f"• Целевая аудитория: {audience}",
-            f"• Платформа: {platform} ({platform_requirements})",
-            f"• Формат: {content_format}",
-            f"• Объем: {volume}",
-            f"• Стиль и тон: {audience_style}",
-        ]
-        
         # Добавляем информацию об НКО, если она есть
-        if has_ngo_info and ngo_name:
+        if user_data.has_ngo_info and user_data.ngo_name:
             sections.extend([
                 "Информация о НКО:",
-                f"• Название: {ngo_name}",
+                f"• Название: {user_data.ngo_name}",
             ])
-            if ngo_description and ngo_description != "Не указано":
-                sections.append(f"• Описание: {ngo_description}")
-            if ngo_activities and ngo_activities != "Не указано":
-                sections.append(f"• Деятельность: {ngo_activities}")
-            if ngo_contact and ngo_contact != "Не указано":
-                sections.append(f"• Контакты: {ngo_contact}")
+            if user_data.ngo_description and user_data.ngo_description != "Не указано":
+                sections.append(f"• Описание: {user_data.ngo_description}")
+            if user_data.ngo_activities and user_data.ngo_activities != "Не указано":
+                sections.append(f"• Деятельность: {user_data.ngo_activities}")
+            if user_data.ngo_contact and user_data.ngo_contact != "Не указано":
+                sections.append(f"• Контакты: {user_data.ngo_contact}")
             sections.append("Обязательно используй эту информацию при создании поста.")
-        
+
         sections.extend([
+            f"Платформа: {user_data.platform} ({self._get_platform_requirements(user_data.platform)})",
             "Дополнительные требования:",
             "• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение.",
             "• Фокусируйся на социальной миссии и помощи людям.",
             "• Обязательно добавь контакты для связи и призыв к конкретному действию.",
+            "• ОБЯЗАТЕЛЬНО добавь 3-5 релевантных хештегов в конце поста по тематике мероприятия/поста.",
         ])
-
-        if has_event and event_details:
-            sections.append("Контекст мероприятия:")
-            sections.append(self._format_event_details(event_details))
-
-        if user_text:
-            sections.append("Информация от пользователя:")
-            sections.append(user_text.strip())
 
         sections.append("Примеры удачных постов для вдохновения:")
         sections.extend(
@@ -154,70 +150,53 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         return textwrap.dedent(prompt).strip()
 
     def build_refactor_text_content_prompt(self, user_data: PromptContext, generated_post: str, user_text: str) -> str:
-        goal = user_data.goal
-        audience_list = self._normalize_to_list(user_data.audience)
-        audience = ", ".join(audience_list)
-        platform = user_data.platform
-        content_format = ", ".join(
-            self._normalize_to_list(user_data.content_format)
-        )
-        volume = user_data.volume
-        event_details = user_data.event_details or ""
-        has_event = bool(user_data.has_event)
+        narrative_style = self._get_narrative_style(user_data.narrative_style)
         
-        # Информация об НКО
-        has_ngo_info = bool(user_data.has_ngo_info)
-        ngo_name = user_data.ngo_name
-        ngo_description = user_data.ngo_description
-        ngo_activities = user_data.ngo_activities
-        ngo_contact = user_data.ngo_contact
-
-        audience_style = self._get_audience_style(audience_list)
-        platform_requirements = self._get_platform_requirements(platform)
-
         sections = [
-            "Выступай как профессиональный SMM-менеджер НКО.",
+            "Ты — профессиональный SMM-менеджер НКО.",
             f"Отредактируй пост в соответствии с данной просьбой: {user_text}",
-            "Общие данные о посте:",
-            f"• Цель: {goal}",
-            f"• Целевая аудитория: {audience}",
-            f"• Платформа: {platform} ({platform_requirements})",
-            f"• Формат: {content_format}",
-            f"• Объем: {volume}",
-            f"• Стиль и тон: {audience_style}",
+            f"Стиль повествования: {narrative_style}",
         ]
-        
-        # Добавляем информацию об НКО, если она есть
-        if has_ngo_info and ngo_name:
+
+        # Добавляем структурированные данные, если есть
+        if user_data.event_type or user_data.event_date:
+            sections.extend([
+                "Структурированные данные:",
+                f"• Событие: {user_data.event_type}",
+                f"• Дата: {user_data.event_date}",
+                f"• Место: {user_data.event_place}",
+                f"• Аудитория: {user_data.event_audience}",
+            ])
+
+        # Добавляем информацию об НКО
+        if user_data.has_ngo_info and user_data.ngo_name:
             sections.extend([
                 "Информация о НКО:",
-                f"• Название: {ngo_name}",
+                f"• Название: {user_data.ngo_name}",
             ])
-            if ngo_description and ngo_description != "Не указано":
-                sections.append(f"• Описание: {ngo_description}")
-            if ngo_activities and ngo_activities != "Не указано":
-                sections.append(f"• Деятельность: {ngo_activities}")
-            if ngo_contact and ngo_contact != "Не указано":
-                sections.append(f"• Контакты: {ngo_contact}")
-            sections.append("Обязательно используй эту информацию при редактировании поста.")
-
-        if has_event and event_details:
-            sections.append("Контекст мероприятия:")
-            sections.append(self._format_event_details(event_details))
+            if user_data.ngo_description and user_data.ngo_description != "Не указано":
+                sections.append(f"• Описание: {user_data.ngo_description}")
+            if user_data.ngo_activities and user_data.ngo_activities != "Не указано":
+                sections.append(f"• Деятельность: {user_data.ngo_activities}")
+            if user_data.ngo_contact and user_data.ngo_contact != "Не указано":
+                sections.append(f"• Контакты: {user_data.ngo_contact}")
 
         sections.extend([
+            f"Платформа: {user_data.platform} ({self._get_platform_requirements(user_data.platform)})",
             "Дополнительные требования:",
             "• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение.",
             "• Фокусируйся на социальной миссии и помощи людям.",
             "• Обязательно добавь контакты для связи и призыв к конкретному действию.",
+            "• ОБЯЗАТЕЛЬНО добавь 3-5 релевантных хештегов в конце поста.",
         ])
 
         sections.append("Вот пост, который нужно отредактировать:")
         sections.append(generated_post)
 
         sections.append(
-            "Ответь только готовым текстом отредактированного поста, без дополнительных комментариев и пояснений."
+            "Ответь только готовым текстом отредактированного поста, без дополнительных комментариев."
         )
+        
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
 
@@ -266,6 +245,22 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
                     result.append(str(item))
             return result
         return [str(value)]
+
+    @staticmethod
+    def _get_narrative_style(style: str) -> str:
+        """Определение стиля на основе выбранного пользователем"""
+        style_lower = style.lower()
+        
+        if "разговорный" in style_lower:
+            return "дружелюбный, простой язык, как разговор с близким другом, используй личные местоимения и эмодзи"
+        elif "официально-деловой" in style_lower:
+            return "профессиональный, структурированный, официальный тон, четкие формулировки"
+        elif "художественный" in style_lower:
+            return "образный, эмоциональный, используй метафоры и яркие описания"
+        elif "позитивный" in style_lower or "мотивирующий" in style_lower:
+            return "вдохновляющий, энергичный, с акцентом на позитивные эмоции и возможности"
+        else:
+            return "универсальный, дружелюбный, но профессиональный"
 
     @staticmethod
     def _get_audience_style(audience: List[str]) -> str:

@@ -2,6 +2,20 @@ from typing import List, Optional
 
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
+# Режимы генерации контента
+GENERATION_MODES = [
+    "📝 Структурированная форма (пошаговый опрос)",
+    "💭 Свободная форма (самостоятельное описание)",
+]
+
+# Стили повествования
+NARRATIVE_STYLES = [
+    "💬 Разговорный стиль",
+    "📋 Официально-деловой стиль", 
+    "🎨 Художественный стиль",
+    "🌟 Позитивный/мотивирующий стиль",
+]
+
 GOAL_OPTIONS = [
     "🎯 Привлечь волонтеров",
     "💰 Найти спонсоров/доноров",
@@ -69,6 +83,14 @@ def _build_keyboard(rows: List[List[str]], *, resize: bool = True, one_time: boo
     )
 
 
+def get_generation_mode_keyboard() -> ReplyKeyboardMarkup:
+    return _build_keyboard([[option] for option in GENERATION_MODES], one_time=True)
+
+
+def get_narrative_style_keyboard() -> ReplyKeyboardMarkup:
+    return _build_keyboard([[option] for option in NARRATIVE_STYLES], one_time=True)
+
+
 def get_goal_keyboard() -> ReplyKeyboardMarkup:
     return _build_keyboard([[option] for option in GOAL_OPTIONS], one_time=True)
 
@@ -101,9 +123,12 @@ def get_skip_keyboard(label: str = SKIP_OPTION) -> ReplyKeyboardMarkup:
     return _build_keyboard([[label]], one_time=True)
 
 
+# ГЛАВНОЕ МЕНЮ - сохраняем старые опции + добавляем новые
 NGO_MAIN_OPTIONS = [
     "🏢 Заполнить информацию об НКО",
-    "✨ Создать контент без НКО",
+    "✨ Создать контент без НКО", 
+    "📝 Создать контент (структурированная форма)",
+    "💭 Создать контент (свободная форма)",
     "📋 Посмотреть мою НКО",
     "🔄 Обновить данные НКО",
 ]
