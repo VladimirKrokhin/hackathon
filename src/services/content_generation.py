@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Union
 
-from infrastructure.prompt_builder import AbstractPromptBuilder, PromptContext, PlanPromptContext
+from infrastructure.prompt_builder import AbstractPromptBuilder, PromptContext, PlanPromptContext, EditPromptContext
 from infrastructure.response_processor import AbstractResponseProcessor
 from infrastructure.gpt import AbstractGPT
 
@@ -103,4 +103,25 @@ class TextContentGenerationService:
         generated_text = self.response_processor.process_response(raw_response)
 
         logger.info(f"Успешно сгенерирован контент-план длиной {len(generated_text)} символов")
+        return generated_text
+
+    async def edit_text(
+        self,
+        user_data: Union[Dict, EditPromptContext]
+    ) -> str:
+        context = (
+            user_data
+            if isinstance(user_data, EditPromptContext)
+            else EditPromptContext.from_dict(user_data or {})
+        )
+
+        logger.info(f"Редактирование текста пользователя.")
+
+        prompt = self.prompt_builder.build_edit_text_prompt(context)
+        logger.info(f"Сформирован промпт длиной {len(prompt)} символов")
+
+        raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
+        generated_text = self.response_processor.process_response(raw_response)
+
+        logger.info(f"Успешно сгенерирован исправленный вариант длиной {len(generated_text)} символов")
         return generated_text
