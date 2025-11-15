@@ -12,3 +12,12 @@ class ContentGeneration(StatesGroup):
     waiting_for_user_text = State()
     waiting_for_confirmation = State()
     waiting_for_refactoring_text = State()
+
+
+class ContentPlan(StatesGroup):
+    waiting_for_period = State()
+    waiting_for_custom_period = State()
+    waiting_for_frequency = State()
+    waiting_for_custom_frequency = State()
+    waiting_for_themes = State()
+    waiting_for_details = State()
