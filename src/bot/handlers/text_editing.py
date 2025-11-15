@@ -72,7 +72,7 @@ async def details_handler(message: Message, state: FSMContext):
             await state.update_data(**data)
 
     await message.answer(
-        "✏️ Редактирую текст...", reply_markup=ReplyKeyboardRemove(),
+        "✏️ Редактирую текст...",
         reply_markup=ReplyKeyboardRemove(),
         )
 
