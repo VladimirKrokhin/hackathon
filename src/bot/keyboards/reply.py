@@ -37,6 +37,20 @@ VOLUME_OPTIONS = [
     "📖 Развернутый пост (5+ предложений + 4-5 карточек)",
 ]
 
+# Content plan keyboards
+PERIOD_OPTIONS = [
+    "3 дня",
+    "Неделя",
+    "Месяц",
+]
+
+FREQUENCY_OPTIONS = [
+    "каждый день",
+    "раз в два дня",
+]
+
+CUSTOM_OPTION = "🖊️ Свой вариант"
+
 YES_NO_OPTIONS = ["✅ Да", "❌ Нет"]
 
 DONE_OPTION = "✅ Готово"
@@ -113,3 +127,15 @@ def get_ngo_navigation_keyboard() -> ReplyKeyboardMarkup:
 
 def get_example_keyboard(example: str) -> ReplyKeyboardMarkup:
     return _build_keyboard([[example]], one_time=True)
+
+
+def get_period_keyboard() -> ReplyKeyboardMarkup:
+    rows = [[option] for option in PERIOD_OPTIONS]
+    rows.append([CUSTOM_OPTION])
+    return _build_keyboard(rows)
+
+
+def get_frequency_keyboard() -> ReplyKeyboardMarkup:
+    rows = [[option] for option in FREQUENCY_OPTIONS]
+    rows.append([CUSTOM_OPTION])
+    return _build_keyboard(rows)

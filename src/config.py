@@ -16,7 +16,7 @@ class Config(BaseSettings):
     YANDEXGPT_CATALOG_ID: str = Field(default="", env="YANDEXGPT_CATALOG_ID") # ID каталога 
 
     # Параметры для YandexGPT
-    YANDEXGPT_MODEL: str = Field(default="yandexgpt-lite", env="YANDEXGPT_MODEL") # Модель из Yandex Cloud
+    YANDEXGPT_MODEL: str = Field(default="yandexgpt-5.1", env="YANDEXGPT_MODEL") # Модель из Yandex Cloud
     YANDEXGPT_TEMPERATURE: float = Field(default=0.5, env="YANDEXGPT_TEMPERATURE")
     YANDEXGPT_MAX_TOKENS: int = Field(default=2000, env="YANDEXGPT_MAX_TOKENS")
     YANDEXGPT_API_URL: str = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"

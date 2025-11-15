@@ -10,7 +10,7 @@ from bot.states import ContentGeneration
 from bot.keyboards.inline import get_post_generation_keyboard
 from services.content_generation import TextContentGenerationService
 
-refactoring_router = Router(name="generation")
+refactoring_router = Router(name="refactoring")
 
 
 logger = logging.getLogger(__name__)

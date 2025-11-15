@@ -14,6 +14,16 @@ class ContentGeneration(StatesGroup):
     waiting_for_refactoring_text = State()
 
 
+class ContentPlan(StatesGroup):
+    waiting_for_period = State()
+    waiting_for_custom_period = State()
+    waiting_for_frequency = State()
+    waiting_for_custom_frequency = State()
+    waiting_for_themes = State()
+    waiting_for_details = State()
+
+
+
 class NGOInfo(StatesGroup):
     waiting_for_ngo_name = State()
     waiting_for_ngo_description = State()
