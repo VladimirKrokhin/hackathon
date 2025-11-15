@@ -1,12 +1,13 @@
 import logging
 
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
-from bot.states import ContentGeneration
-from bot.keyboards.reply import get_goal_keyboard
+from bot.states import ContentGeneration, NGOInfo
+from bot.keyboards.reply import get_goal_keyboard, get_ngo_main_keyboard
+from app import dp
 
 logger = logging.getLogger(__name__)
 
@@ -15,15 +16,51 @@ start_router = Router(name="start")
 
 @start_router.message(CommandStart())
 async def start_handler(message: Message, state: FSMContext):
-    """Точка входа в сценарий генерации контента."""
+    """Точка входа - главное меню с выбором режима работы."""
     await state.clear()
-    await message.answer(
-        "👋 Привет! Я — ContentHelper, ваш AI-ассистент для создания контента в НКО.\n\n"
-        "Я помогу вам подготовить профессиональные посты и карточки для соцсетей за пару минут.\n\n"
-        "Какова основная цель вашего поста?",
-        reply_markup=get_goal_keyboard(),
-    )
-    await state.set_state(ContentGeneration.waiting_for_goal)
+    
+    # Проверяем наличие данных об НКО в БД
+    ngo_service = dp["ngo_service"]
+    user_id = message.from_user.id
+    
+    if ngo_service.ngo_exists(user_id):
+        # Если у пользователя есть данные НКО в БД, получаем их
+        ngo_data = ngo_service.get_ngo_data(user_id)
+        if ngo_data:
+            ngo_name = ngo_data.get("ngo_name", "")
+            await message.answer(
+                f"👋 Привет! Я — ContentHelper, ваш AI-ассистент для создания контента в НКО.\n\n"
+                f"🏢 У вас заполнена информация о НКО: {ngo_name}\n"
+                f"Теперь я могу создавать персонализированный контент с упоминанием вашей организации.\n\n"
+                f"Что вы хотите сделать?",
+                reply_markup=get_ngo_main_keyboard(),
+            )
+        else:
+            await message.answer(
+                "👋 Привет! Я — ContentHelper, ваш AI-ассистент для создания контента в НКО.\n\n"
+                "Я помогу вам подготовить профессиональные посты и карточки для соцсетей за пару минут.\n\n"
+                "Вы можете заполнить информацию о вашей НКО для создания персонализированного контента, "
+                "или сразу начать создавать контент без указания НКО.\n\n"
+                "Что вы хотите сделать?",
+                reply_markup=get_ngo_main_keyboard(),
+            )
+    else:
+        await message.answer(
+            "👋 Привет! Я — ContentHelper, ваш AI-ассистент для создания контента в НКО.\n\n"
+            "Я помогу вам подготовить профессиональные посты и карточки для соцсетей за пару минут.\n\n"
+            "Вы можете заполнить информацию о вашей НКО для создания персонализированного контента, "
+            "или сразу начать создавать контент без указания НКО.\n\n"
+            "Что вы хотите сделать?",
+            reply_markup=get_ngo_main_keyboard(),
+        )
+
+
+@start_router.message(Command("ngo"))
+async def ngo_command_handler(message: Message, state: FSMContext):
+    """Обработчик команды /ngo - переход к сценарию сбора информации об НКО."""
+    # Импортируем здесь, чтобы избежать циклических импортов
+    from bot.handlers.ngo_info import ngo_command_handler as ngo_handler
+    await ngo_handler(message, state)
 
 
 @start_router.message(Command("cancel"))
@@ -31,8 +68,42 @@ async def cancel_handler(message: Message, state: FSMContext):
     """Команда для сброса текущего сценария."""
     await state.clear()
     await message.answer(
-        "❎ Текущий сценарий сброшен. Начнём заново!\n\n"
-        "Выберите цель поста:",
+        "❎ Текущий сценарий сброшен.\n\n"
+        "Что вы хотите сделать?",
+        reply_markup=get_ngo_main_keyboard(),
+    )
+
+
+@start_router.message(F.text == "🏢 Заполнить информацию об НКО")
+async def ngo_menu_handler(message: Message, state: FSMContext):
+    """Обработчик кнопки главного меню для заполнения информации об НКО."""
+    from bot.handlers.ngo_info import ngo_command_handler as ngo_handler
+    await ngo_handler(message, state)
+
+
+@start_router.message(F.text == "✨ Создать контент без НКО")
+async def content_without_ngo_handler(message: Message, state: FSMContext):
+    """Обработчик для создания контента без информации об НКО."""
+    await state.clear()
+    await state.update_data(has_ngo_info=False)
+    
+    await message.answer(
+        "✨ Понятно! Создаем контент без упоминания НКО.\n\n"
+        "Какова основная цель вашего поста?",
         reply_markup=get_goal_keyboard(),
     )
     await state.set_state(ContentGeneration.waiting_for_goal)
+
+
+@start_router.message(F.text == "📋 Посмотреть мою НКО")
+async def view_ngo_handler(message: Message, state: FSMContext):
+    """Обработчик для просмотра информации об НКО."""
+    from bot.handlers.ngo_info import view_ngo_info_handler as view_handler
+    await view_handler(message, state)
+
+
+@start_router.message(F.text == "🔄 Обновить данные НКО")
+async def update_ngo_handler(message: Message, state: FSMContext):
+    """Обработчик для обновления данных НКО."""
+    from bot.handlers.ngo_info import update_ngo_info_handler as update_handler
+    await update_handler(message, state)

@@ -35,6 +35,20 @@ async def user_text_handler(message: Message, state: FSMContext):
     goal = data.get("goal", "🎯 Привлечь волонтеров")
     platform = data.get("platform", "выбранной платформы")
     audience = data.get("audience", [])
+    
+    # Получаем информацию об НКО из базы данных
+    ngo_service = dp["ngo_service"]
+    user_id = message.from_user.id
+    ngo_data = ngo_service.get_ngo_data(user_id)
+    
+    # Обновляем данные пользователя информацией из БД
+    if ngo_data:
+        data.update(ngo_data)
+    
+    # Устанавливаем значения по умолчанию
+    ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
+    ngo_contact = ngo_data.get("ngo_contact", "тел: +7 (XXX) XXX-XX-XX") if ngo_data else "тел: +7 (XXX) XXX-XX-XX"
+    
     generated_post = None
 
     await message.answer("🧠 Генерирую контент...", reply_markup=ReplyKeyboardRemove())
@@ -50,6 +64,7 @@ async def user_text_handler(message: Message, state: FSMContext):
         )
         raise error
 
+    # Показываем сгенерированный пост
     await message.answer(
         f"✅ Ваш сгенерированный контент:",
     )
@@ -62,8 +77,8 @@ async def user_text_handler(message: Message, state: FSMContext):
             "title": get_title_by_goal(goal),
             "subtitle": f"Для {', '.join(audience or ['наших подопечных'])}",
             "content": f"{generated_post[:250]}..." if len(generated_post) > 250 else generated_post,
-            "org_name": data.get("org_name", "Ваша НКО"),
-            "contact_info": data.get("contact_info", "тел: +7 (XXX) XXX-XX-XX"),
+            "org_name": ngo_name,
+            "contact_info": ngo_contact,
             "primary_color": get_color_by_goal(goal),
             "secondary_color": get_secondary_color_by_goal(goal),
             "text_color": "#333333",

@@ -12,3 +12,11 @@ class ContentGeneration(StatesGroup):
     waiting_for_user_text = State()
     waiting_for_confirmation = State()
     waiting_for_refactoring_text = State()
+
+
+class NGOInfo(StatesGroup):
+    waiting_for_ngo_name = State()
+    waiting_for_ngo_description = State()
+    waiting_for_ngo_activities = State()
+    waiting_for_ngo_contact = State()
+    waiting_for_ngo_confirmation = State()
