@@ -1,7 +1,7 @@
 import logging
 
 from aiogram import Bot, Dispatcher, Router
-from playwright.async_api import async_playwright, Browser
+from playwright.async_api import BrowserContext, async_playwright, Browser
 from playwright.async_api import Playwright
 
 
@@ -57,6 +57,11 @@ async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatc
 
     async def close_browser(browser: Browser, playwright: Playwright) -> None:
         logger.info("Закрываю браузер Playwright...")
+
+        browser_context: BrowserContext = dp.get("browser_context")
+        if browser_context:
+            await browser_context.close()
+            
         await browser.close()
         await playwright.stop()
 

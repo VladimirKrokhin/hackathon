@@ -4,9 +4,10 @@ import aiofiles
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Tuple
-from playwright.async_api import Browser, Page
+from playwright.async_api import Browser, BrowserContext, Page
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from config import config
+from app import dp
 
 TEMPLATES_DIR = Path("templates")
 
@@ -58,9 +59,14 @@ class PlaywrightCardGenerator(BaseCardGenerator):
         try:
             if not self.browser.is_connected():
                 logger.error("Браузер был отключен! Невозможно создать карточку.")
-                raise Exception("Browser is not connected. It might have crashed.")
+                raise Exception("Браузер не подключен.")
+
+            last_context: BrowserContext = dp.get("browser_context")
+            if last_context:
+                await last_context.close()
 
             context = await self.browser.new_context()
+            dp["browser_context"]: BrowserContext = context
             
             page = await context.new_page()
 
