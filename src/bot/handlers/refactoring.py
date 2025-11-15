@@ -25,7 +25,7 @@ async def refactoring_text_handler(message: Message, state: FSMContext):
 
     generated_post = None
 
-    await message.answer("🧠 Преобразую контент с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
+    await message.answer("🧠 Преобразую контент...", reply_markup=ReplyKeyboardRemove())
 
     try:
         text_content_generation_service: TextContentGenerationService = dp["text_content_generation_service"]

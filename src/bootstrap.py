@@ -1,5 +1,4 @@
 import logging
-from types import CoroutineType
 
 from aiogram import Bot, Dispatcher, Router
 from playwright.async_api import async_playwright, Browser

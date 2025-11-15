@@ -37,7 +37,7 @@ async def user_text_handler(message: Message, state: FSMContext):
     audience = data.get("audience", [])
     generated_post = None
 
-    await message.answer("🧠 Генерирую контент с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
+    await message.answer("🧠 Генерирую контент...", reply_markup=ReplyKeyboardRemove())
 
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]

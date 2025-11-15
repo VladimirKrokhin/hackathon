@@ -53,12 +53,6 @@ class Config(BaseSettings):
         if not self.BOT_TOKEN:
             errors.append("BOT_TOKEN не установлен в .env файле")
         
-        # Проверяем только если не в демо-режиме
-        if not self.DEMO_MODE:
-            if not self.YANDEXGPT_API_KEY:
-                errors.append("YANDEXGPT_API_KEY не установлен в .env файле")
-            if not self.YANDEXGPT_CATALOG_ID:
-                errors.append("YANDEXGPT_CATALOG_ID не установлен в .env файле")
         
         return errors
 

@@ -7,7 +7,7 @@ from bot.handlers import router
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO if not config.DEBUG else logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
