@@ -11,7 +11,7 @@ from bot.handlers import router
 from infrastructure.prompt_builder import YandexGPTPromptBuilder
 from infrastructure.response_processor import YandexGPTResponseProcessor
 from infrastructure.card_generation import PlaywrightCardGenerator
-from services.content_generation import ContentGenerationService
+from services.content_generation import TextContentGenerationService
 from services.card_generation import CardGenerationService
 from infrastructure.gpt import YandexGPT
 
@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 
-async def build_yandexgpt_content_generation_service() -> ContentGenerationService:
+async def build_yandexgpt_content_generation_service() -> TextContentGenerationService:
     response_processor = YandexGPTResponseProcessor()
     gpt_client = YandexGPT()
     prompt_builder = YandexGPTPromptBuilder()
 
-    service = ContentGenerationService(
+    service = TextContentGenerationService(
         prompt_builder=prompt_builder,
         gpt_client=gpt_client,
         response_processor=response_processor,
@@ -74,14 +74,14 @@ async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatc
 
 
 
-_create_content_generation_service: ContentGenerationService = build_yandexgpt_content_generation_service
+_create_content_generation_service: TextContentGenerationService = build_yandexgpt_content_generation_service
 _create_card_generation_service: CardGenerationService = build_playwright_card_generation_service
 
 
 async def build_services(bot: Bot, dispatcher: Dispatcher):
     dp = dispatcher
 
-    dp["content_generation_service"]: ContentGenerationService = await _create_content_generation_service()
+    dp["text_content_generation_service"]: TextContentGenerationService = await _create_content_generation_service()
     dp["card_generation_service"]: CardGenerationService = await _create_card_generation_service(bot, dp) 
 
 
