@@ -7,9 +7,11 @@ from .refactoring import refactoring_router
 from .content_plan import content_plan_router
 from .callbacks import callbacks_router
 from .fallback import fallback_router
+from .ngo_info import ngo_info_router
 
 router = Router(name="main_router")
 router.include_router(start_router)
+router.include_router(ngo_info_router)
 router.include_router(questionnaire_router)
 router.include_router(generation_router)
 router.include_router(refactoring_router)

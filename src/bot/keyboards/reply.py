@@ -101,6 +101,30 @@ def get_skip_keyboard(label: str = SKIP_OPTION) -> ReplyKeyboardMarkup:
     return _build_keyboard([[label]], one_time=True)
 
 
+NGO_MAIN_OPTIONS = [
+    "🏢 Заполнить информацию об НКО",
+    "✨ Создать контент без НКО",
+    "📋 Посмотреть мою НКО",
+    "🔄 Обновить данные НКО",
+]
+
+NGO_NAVIGATION_OPTIONS = [
+    "❌ Отмена",
+    "⏩ Пропустить",
+    "✅ Готово",
+]
+
+
+def get_ngo_main_keyboard() -> ReplyKeyboardMarkup:
+    rows = [[option] for option in NGO_MAIN_OPTIONS]
+    return _build_keyboard(rows, one_time=True)
+
+
+def get_ngo_navigation_keyboard() -> ReplyKeyboardMarkup:
+    rows = [[option] for option in NGO_NAVIGATION_OPTIONS]
+    return _build_keyboard(rows)
+
+
 def get_example_keyboard(example: str) -> ReplyKeyboardMarkup:
     return _build_keyboard([[example]], one_time=True)
 

@@ -1,5 +1,4 @@
 import logging
-from types import CoroutineType
 
 from aiogram import Bot, Dispatcher, Router
 from playwright.async_api import async_playwright, Browser
@@ -14,6 +13,9 @@ from infrastructure.card_generation import PlaywrightCardGenerator
 from services.content_generation import TextContentGenerationService
 from services.card_generation import CardGenerationService
 from infrastructure.gpt import YandexGPT
+from infrastructure.database import init_database, get_db_session
+from infrastructure.repositories.ngo_repository import NGORepository
+from services.ngo_service import NGOService
 
 
 
@@ -83,6 +85,19 @@ async def build_services(bot: Bot, dispatcher: Dispatcher):
 
     dp["text_content_generation_service"]: TextContentGenerationService = await _create_content_generation_service()
     dp["card_generation_service"]: CardGenerationService = await _create_card_generation_service(bot, dp) 
+    
+    # Инициализируем сервис НКО
+    init_database()  # Инициализируем базу данных
+    
+    # Создаем фабрику для получения сессий и сервиса НКО
+    def get_ngo_service():
+        session = get_db_session()
+        ngo_repository = NGORepository(session)
+        return NGOService(ngo_repository)
+    
+    dp["get_ngo_service"] = get_ngo_service
+    # Для обратной совместимости создаем один экземпляр
+    dp["ngo_service"] = get_ngo_service()
 
 
 async def on_startup(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], router: Router):
@@ -130,4 +145,3 @@ async def bootstrap(bot: Bot, dispatcher: Dispatcher):
         logger.exception(f"Критическая ошибка: {exc}")
     finally:
         await bot.session.close()
-        

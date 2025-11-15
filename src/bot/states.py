@@ -21,3 +21,12 @@ class ContentPlan(StatesGroup):
     waiting_for_custom_frequency = State()
     waiting_for_themes = State()
     waiting_for_details = State()
+
+
+
+class NGOInfo(StatesGroup):
+    waiting_for_ngo_name = State()
+    waiting_for_ngo_description = State()
+    waiting_for_ngo_activities = State()
+    waiting_for_ngo_contact = State()
+    waiting_for_ngo_confirmation = State()

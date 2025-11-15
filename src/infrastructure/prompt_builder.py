@@ -19,6 +19,13 @@ class PromptContext:
     volume: str = ""
     event_details: dict[str, str] = field(default_factory=dict)
     has_event: bool = False
+    
+    # Информация об НКО
+    has_ngo_info: bool = False
+    ngo_name: str = ""
+    ngo_description: str = ""
+    ngo_activities: str = ""
+    ngo_contact: str = ""
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PromptContext":
@@ -30,6 +37,11 @@ class PromptContext:
             volume=data.get("volume", ""),
             event_details=data.get("event_details", {}),
             has_event=bool(data.get("has_event", False)),
+            has_ngo_info=bool(data.get("has_ngo_info", False)),
+            ngo_name=data.get("ngo_name", ""),
+            ngo_description=data.get("ngo_description", ""),
+            ngo_activities=data.get("ngo_activities", ""),
+            ngo_contact=data.get("ngo_contact", ""),
         )
 
 
@@ -74,6 +86,13 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         volume = user_data.volume
         event_details = user_data.event_details or ""
         has_event = bool(user_data.has_event)
+        
+        # Информация об НКО
+        has_ngo_info = bool(user_data.has_ngo_info)
+        ngo_name = user_data.ngo_name
+        ngo_description = user_data.ngo_description
+        ngo_activities = user_data.ngo_activities
+        ngo_contact = user_data.ngo_contact
 
         audience_style = self._get_audience_style(audience_list)
         platform_requirements = self._get_platform_requirements(platform)
@@ -87,11 +106,28 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
             f"• Формат: {content_format}",
             f"• Объем: {volume}",
             f"• Стиль и тон: {audience_style}",
+        ]
+        
+        # Добавляем информацию об НКО, если она есть
+        if has_ngo_info and ngo_name:
+            sections.extend([
+                "Информация о НКО:",
+                f"• Название: {ngo_name}",
+            ])
+            if ngo_description and ngo_description != "Не указано":
+                sections.append(f"• Описание: {ngo_description}")
+            if ngo_activities and ngo_activities != "Не указано":
+                sections.append(f"• Деятельность: {ngo_activities}")
+            if ngo_contact and ngo_contact != "Не указано":
+                sections.append(f"• Контакты: {ngo_contact}")
+            sections.append("Обязательно используй эту информацию при создании поста.")
+        
+        sections.extend([
             "Дополнительные требования:",
             "• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение.",
             "• Фокусируйся на социальной миссии и помощи людям.",
             "• Обязательно добавь контакты для связи и призыв к конкретному действию.",
-        ]
+        ])
 
         if has_event and event_details:
             sections.append("Контекст мероприятия:")
@@ -128,6 +164,13 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         volume = user_data.volume
         event_details = user_data.event_details or ""
         has_event = bool(user_data.has_event)
+        
+        # Информация об НКО
+        has_ngo_info = bool(user_data.has_ngo_info)
+        ngo_name = user_data.ngo_name
+        ngo_description = user_data.ngo_description
+        ngo_activities = user_data.ngo_activities
+        ngo_contact = user_data.ngo_contact
 
         audience_style = self._get_audience_style(audience_list)
         platform_requirements = self._get_platform_requirements(platform)
@@ -143,15 +186,31 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
             f"• Объем: {volume}",
             f"• Стиль и тон: {audience_style}",
         ]
+        
+        # Добавляем информацию об НКО, если она есть
+        if has_ngo_info and ngo_name:
+            sections.extend([
+                "Информация о НКО:",
+                f"• Название: {ngo_name}",
+            ])
+            if ngo_description and ngo_description != "Не указано":
+                sections.append(f"• Описание: {ngo_description}")
+            if ngo_activities and ngo_activities != "Не указано":
+                sections.append(f"• Деятельность: {ngo_activities}")
+            if ngo_contact and ngo_contact != "Не указано":
+                sections.append(f"• Контакты: {ngo_contact}")
+            sections.append("Обязательно используй эту информацию при редактировании поста.")
 
         if has_event and event_details:
             sections.append("Контекст мероприятия:")
             sections.append(self._format_event_details(event_details))
 
-        sections.append("Дополнительные требования:")
-        sections.append("• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение.")
-        sections.append("• Фокусируйся на социальной миссии и помощи людям.")
-        sections.append("• Обязательно добавь контакты для связи и призыв к конкретному действию.")
+        sections.extend([
+            "Дополнительные требования:",
+            "• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение.",
+            "• Фокусируйся на социальной миссии и помощи людям.",
+            "• Обязательно добавь контакты для связи и призыв к конкретному действию.",
+        ])
 
         sections.append("Вот пост, который нужно отредактировать:")
         sections.append(generated_post)
@@ -263,5 +322,3 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         ).strip()
 
         return f"{event_text}\n{template}"
-
-
