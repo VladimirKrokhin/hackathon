@@ -12,9 +12,12 @@ from bot.keyboards.reply import (
     PERIOD_OPTIONS,
     FREQUENCY_OPTIONS,
     CUSTOM_OPTION,
+    SKIP_OPTION,
     get_period_keyboard,
     get_frequency_keyboard,
+    get_skip_keyboard,
 )
+from services.content_generation import TextContentGenerationService
 
 
 content_plan_router = Router(name="content_plan")
@@ -123,7 +126,8 @@ async def themes_handler(message: Message, state: FSMContext):
     await state.update_data(themes=themes)
 
     await message.answer(
-        "🖋️ Укажите дополнительную информацию или требования."
+        "🖋️ Укажите дополнительную информацию или требования.",
+        reply_markup=get_skip_keyboard(),
     )
     await state.set_state(ContentPlan.waiting_for_details)
 
@@ -131,13 +135,17 @@ async def themes_handler(message: Message, state: FSMContext):
 @content_plan_router.message(ContentPlan.waiting_for_details, F.text)
 async def details_handler(message: Message, state: FSMContext):
     details = message.text.strip()
+    if details == SKIP_OPTION:
+        details = ""
     await state.update_data(details=details)
+
     data = await state.get_data()
 
     await message.answer("🧠 Генерирую контент-план...")
 
     try:
-        generated_plan = await dp["content_generation_service"].generate_content_plan(data)
+        text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
+        generated_plan = await text_generation_service.generate_content_plan(data)
         await state.update_data(generated_plan=generated_plan)
     except Exception as error:
         logger.exception("Ошибка при генерации плана: %s", error)
@@ -150,3 +158,5 @@ async def details_handler(message: Message, state: FSMContext):
         f"✅ Ваш сгенерированный конетн-план:",
     )
     await message.answer(generated_plan, parse_mode=ParseMode.MARKDOWN)
+
+    await state.clear()
