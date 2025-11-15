@@ -33,6 +33,23 @@ class PromptContext:
         )
 
 
+@dataclass
+class PlanPromptContext:
+    period: str = ""
+    frequency: str = ""
+    themes: str = ""
+    details: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PlanPromptContext":
+        return cls(
+            period=data.get("period", ""),
+            frequency=data.get("frequency", ""),
+            themes=data.get("themes", ""),
+            details=data.get("details", ""),
+        )
+
+
 class AbstractPromptBuilder(ABC):
     @abstractmethod
     def build_text_content_prompt(self, user_data: PromptContext, user_text: str) -> str:
@@ -142,6 +159,28 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         sections.append(
             "Ответь только готовым текстом отредактированного поста, без дополнительных комментариев и пояснений."
         )
+        prompt = "\n".join(sections)
+        return textwrap.dedent(prompt).strip()
+
+    def build_content_plan_prompt(self, user_data: PlanPromptContext) -> str:
+
+        period = user_data.period
+        frequency = user_data.frequency
+        themes = user_data.themes
+        details = user_data.details
+
+        sections = [
+            "Задача: составь контент-план для канала НКО в соцсети. Укажи дни и категории постов.",
+            "Контекст для создания:",
+            f"• Период: {period}",
+            f"• Частота публикаций: {frequency}",
+            f"• Темы: {themes}",
+            f"• Особые требования: {details}",
+            "Также давай пояснения почему ты предложил именно такой план."
+            "Используй отступы, списки и эмодзи для лучшей читаемости. Не перегружай текст."
+            "Используй оформление текста, которое корректно отображается в Telegram."
+        ]
+
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
 
