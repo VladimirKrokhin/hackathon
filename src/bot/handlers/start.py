@@ -115,6 +115,21 @@ async def free_form_content_handler(message: Message, state: FSMContext):
     await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
 
 
+@start_router.message(F.text == "✏️ Редактировать контент")
+async def edit_text_handler(message: Message, state: FSMContext):
+    """Обработчик для создания контента в свободной форме."""
+    await state.clear()
+    await state.update_data(edit_text=True, has_ngo_info=False)
+
+    await message.answer(
+        "✏️ Хорошо! Редактируем исходный текст.\n\n"
+        "Для создания персонализированного контента с данными НКО - выберите 'Да'.\n"
+        "Или продолжите без данных НКО - выберите 'Нет'.",
+        reply_markup=get_yes_no_keyboard(),
+    )
+    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
+
+
 @start_router.message(F.text == "📋 Посмотреть мою НКО")
 async def view_ngo_handler(message: Message, state: FSMContext):
     """Обработчик для просмотра информации об НКО."""
