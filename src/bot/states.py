@@ -33,6 +33,12 @@ class ContentPlan(StatesGroup):
     waiting_for_details = State()
 
 
+class EditText(StatesGroup):
+    waiting_for_text = State()
+    waiting_for_details = State()
+
+
+
 class NGOInfo(StatesGroup):
     waiting_for_ngo_name = State()
     waiting_for_ngo_description = State()

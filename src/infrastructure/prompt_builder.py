@@ -76,6 +76,19 @@ class PlanPromptContext:
         )
 
 
+@dataclass
+class EditPromptContext:
+    text_to_edit: str = ""
+    details: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "EditPromptContext":
+        return cls(
+            text_to_edit=data.get("text_to_edit", ""),
+            details=data.get("details", ""),
+        )
+
+
 class AbstractPromptBuilder(ABC):
     @abstractmethod
     def build_text_content_prompt(self, user_data: PromptContext, user_text: str) -> str:
@@ -213,11 +226,33 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
             f"• Период: {period}",
             f"• Частота публикаций: {frequency}",
             f"• Темы: {themes}",
-            f"• Особые требования: {details}",
-            "Также давай пояснения почему ты предложил именно такой план."
-            "Используй отступы, списки и эмодзи для лучшей читаемости. Не перегружай текст."
-            "Используй оформление текста, которое корректно отображается в Telegram."
         ]
+
+        if details:
+            sections.append(f"• Особые требования: {details}")
+
+        sections.extend([
+            "Также давай пояснения почему ты предложил именно такой план.",
+            "Используй отступы, списки и эмодзи для лучшей читаемости. Не перегружай текст.",
+            "Используй оформление текста, которое корректно отображается в Telegram.",
+        ])
+
+        prompt = "\n".join(sections)
+        return textwrap.dedent(prompt).strip()
+
+    def build_edit_text_prompt(self, user_data: EditPromptContext) -> str:
+        text_to_edit = user_data.text_to_edit
+        details = user_data.details
+
+        sections = [
+            "Задача: отредактируй текст по грамматике, орфографии, логике и стилю. ",
+            "Старайся сохранять основную тему исходного текста."
+            "Покажи исправленный вариант и перечисли, какие ошибки были и как их исправили.",
+            f"Исходный текст: {text_to_edit}",
+        ]
+
+        if details:
+            sections.append(f"Дополнительные детали, которые нужно учитывать при редактировании текста: {details}")
 
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
