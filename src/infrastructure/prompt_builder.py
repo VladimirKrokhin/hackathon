@@ -80,12 +80,24 @@ class PlanPromptContext:
 class EditPromptContext:
     text_to_edit: str = ""
     details: str = ""
+    # Информация об НКО
+    has_ngo_info: bool = False
+    ngo_name: str = ""
+    ngo_description: str = ""
+    ngo_activities: str = ""
+    ngo_contact: str = ""
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "EditPromptContext":
         return cls(
             text_to_edit=data.get("text_to_edit", ""),
             details=data.get("details", ""),
+            # НКО
+            has_ngo_info=bool(data.get("has_ngo_info", False)),
+            ngo_name=data.get("ngo_name", ""),
+            ngo_description=data.get("ngo_description", ""),
+            ngo_activities=data.get("ngo_activities", ""),
+            ngo_contact=data.get("ngo_contact", ""),
         )
 
 
@@ -246,10 +258,25 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
 
         sections = [
             "Задача: отредактируй текст по грамматике, орфографии, логике и стилю. ",
-            "Старайся сохранять основную тему исходного текста."
+            "Старайся сохранять основную тему исходного текста. ",
             "Покажи исправленный вариант и перечисли, какие ошибки были и как их исправили.",
             f"Исходный текст: {text_to_edit}",
         ]
+
+        # Добавляем информацию об НКО, если она есть
+        if user_data.has_ngo_info and user_data.ngo_name:
+            sections.extend([
+                "",
+                "Информация о НКО (используй эту информацию при редактировании, если она релевантна):",
+                f"• Название: {user_data.ngo_name}",
+            ])
+            if user_data.ngo_description and user_data.ngo_description != "Не указано":
+                sections.append(f"• Описание: {user_data.ngo_description}")
+            if user_data.ngo_activities and user_data.ngo_activities != "Не указано":
+                sections.append(f"• Деятельность: {user_data.ngo_activities}")
+            if user_data.ngo_contact and user_data.ngo_contact != "Не указано":
+                sections.append(f"• Контакты: {user_data.ngo_contact}")
+            sections.append("Если в тексте упоминается организация, используй информацию о НКО для уточнения.")
 
         if details:
             sections.append(f"Дополнительные детали, которые нужно учитывать при редактировании текста: {details}")

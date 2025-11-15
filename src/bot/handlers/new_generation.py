@@ -4,7 +4,7 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 
-from bot.states import ContentGeneration
+from bot.states import ContentGeneration, EditText
 from bot.keyboards.reply import (
     get_narrative_style_keyboard,
     get_platform_keyboard,
@@ -32,6 +32,7 @@ async def ngo_info_choice_handler(message: Message, state: FSMContext):
     has_ngo = answer == YES_NO_OPTIONS[0]
     data = await state.get_data()
     generation_mode = data.get("generation_mode", "structured")
+    edit_text = data.get("edit_text", False)
 
     if has_ngo:
         # Получаем данные НКО из БД
@@ -58,7 +59,14 @@ async def ngo_info_choice_handler(message: Message, state: FSMContext):
         await state.update_data(has_ngo_info=False)
 
     # Переходим к соответствующему режиму
-    if generation_mode == "structured":
+    if edit_text:
+        # Режим редактирования текста
+        await message.answer(
+            "✏️ Отлично! Теперь введите текст, который нужно отредактировать.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await state.set_state(EditText.waiting_for_text)
+    elif generation_mode == "structured":
         await message.answer(
             "📝 Отлично! Начинаем структурированную форму.\n\n"
             "**Что за событие?**\n"

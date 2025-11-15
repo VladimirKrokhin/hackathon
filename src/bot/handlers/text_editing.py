@@ -56,8 +56,23 @@ async def details_handler(message: Message, state: FSMContext):
     await state.update_data(details=details)
 
     data = await state.get_data()
+    
+    # Данные НКО уже должны быть в состоянии после выбора пользователя
+    # Если их нет, но пользователь хотел использовать НКО, попробуем получить из БД
+    if data.get("has_ngo_info") and not data.get("ngo_name"):
+        ngo_service = dp["ngo_service"]
+        user_id = message.from_user.id
+        ngo_data = ngo_service.get_ngo_data(user_id)
+        if ngo_data:
+            data.update({
+                "ngo_name": ngo_data.get("ngo_name", ""),
+                "ngo_description": ngo_data.get("ngo_description", ""),
+                "ngo_activities": ngo_data.get("ngo_activities", ""),
+                "ngo_contact": ngo_data.get("ngo_contact", ""),
+            })
+            await state.update_data(**data)
 
-    await message.answer("🧠 Генерирую контент-план с помощью YandexGPT...")
+    await message.answer("✏️ Редактирую текст с помощью YandexGPT...", reply_markup=ReplyKeyboardRemove())
 
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
@@ -66,12 +81,12 @@ async def details_handler(message: Message, state: FSMContext):
     except Exception as error:
         logger.exception("Ошибка при редактировании текста: %s", error)
         await message.answer(
-            "⚠️ Не удалось получить ответ."
+            "⚠️ Не удалось отредактировать текст. Попробуйте позже."
         )
-        raise error
+        return
 
     await message.answer(
-        f"✅ Ваш отредактированный текст:",
+        "✅ Ваш отредактированный текст:",
     )
     await message.answer(generated_text, parse_mode=ParseMode.MARKDOWN)
 
