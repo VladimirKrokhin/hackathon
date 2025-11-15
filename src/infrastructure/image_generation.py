@@ -1,0 +1,348 @@
+import asyncio
+import json
+import logging
+import base64
+from abc import ABC, abstractmethod
+from typing import Dict, Optional, Tuple
+
+import aiohttp
+from aiohttp import FormData
+
+from src.config import config
+
+logger = logging.getLogger(__name__)
+
+
+class AbstractImageGenerator(ABC):
+    """Базовый интерфейс для генераторов изображений."""
+
+    @property
+    @abstractmethod
+    def model_name(self) -> str:
+        """Возвращает имя модели."""
+        pass
+
+    @abstractmethod
+    async def generate(
+        self,
+        prompt: str,
+        width: int = 1024,
+        height: int = 1024,
+        images: int = 1,
+    ) -> bytes:
+        """Генерирует изображение по промпту и возвращает байты изображения."""
+        pass
+
+
+class FusionBrainImageGenerator(AbstractImageGenerator):
+    """Генератор изображений через Fusion Brain API (Kandinski)."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        secret_key: str,
+        api_url: str,
+        pipeline_id: str,
+        timeout: int,
+        poll_interval: int,
+        max_poll_attempts: int,
+    ):
+        self.api_key = api_key
+        self.secret_key = secret_key
+        self.api_url = api_url.rstrip("/")
+        self.pipeline_id = pipeline_id
+        self.timeout = timeout
+        self.poll_interval = poll_interval
+        self.max_poll_attempts = max_poll_attempts
+
+    @property
+    def model_name(self) -> str:
+        return "Fusion Brain (Kandinski)"
+
+    def _get_auth_headers(self) -> Dict[str, str]:
+        """
+        Формирует заголовки авторизации для Fusion Brain API.
+        
+        Fusion Brain использует заголовки X-Key и X-Secret с префиксами "Key " и "Secret ".
+        Если получаете 401 ошибку, проверьте:
+        1. Правильность API ключа и Secret ключа
+        2. Не истек ли срок действия ключей
+        3. Что ключи активированы в личном кабинете Fusion Brain
+        """
+        headers = {
+            "X-Key": f"Key {self.api_key}",
+            "X-Secret": f"Secret {self.secret_key}",
+        }
+        logger.debug(f"Заголовки авторизации: X-Key=Key {self.api_key[:10]}..., X-Secret=Secret {self.secret_key[:10]}...")
+        return headers
+    
+    async def get_pipeline_id(self) -> Optional[str]:
+        """
+        Получает ID доступного пайплайна для генерации.
+        
+        Returns:
+            ID первого доступного пайплайна или None в случае ошибки
+        """
+        headers = self._get_auth_headers()
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.api_url}/key/api/v1/pipelines",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
+                    if response.status == 200:
+                        pipelines = await response.json()
+                        if pipelines and len(pipelines) > 0:
+                            pipeline_id = pipelines[0].get('id')
+                            logger.info(f"Получен pipeline_id: {pipeline_id}")
+                            return pipeline_id
+                        else:
+                            logger.warning("Список пайплайнов пуст")
+                            return None
+                    else:
+                        response_text = await response.text()
+                        logger.error(f"Не удалось получить список пайплайнов: {response.status}, {response_text}")
+                        return None
+        except Exception as e:
+            logger.error(f"Ошибка при получении списка пайплайнов: {e}")
+            return None
+
+    async def _start_generation(
+        self,
+        prompt: str,
+        width: int,
+        height: int,
+        images: int,
+        negative_prompt: Optional[str] = None,
+    ) -> str:
+        """
+        Запускает генерацию изображения и возвращает UUID задачи.
+        
+        Args:
+            prompt: Текстовое описание изображения
+            width: Ширина изображения
+            height: Высота изображения
+            images: Количество изображений
+            negative_prompt: Негативный промпт (опционально)
+        """
+        # Получаем pipeline_id если он не установлен
+        pipeline_id = self.pipeline_id
+        if not pipeline_id:
+            logger.info("pipeline_id не установлен, получаем его динамически...")
+            pipeline_id = await self.get_pipeline_id()
+            if not pipeline_id:
+                raise Exception("Не удалось получить pipeline_id. Проверьте API ключи и доступность сервиса.")
+            self.pipeline_id = pipeline_id
+        
+        params = {
+            "type": "GENERATE",
+            "numImages": images,
+            "width": width,
+            "height": height,
+            "generateParams": {
+                "query": prompt
+            }
+        }
+        
+        # Добавляем негативный промпт если указан
+        if negative_prompt:
+            params["negativePromptDecoder"] = negative_prompt
+        
+        data = FormData()
+        data.add_field('pipeline_id', pipeline_id)
+        data.add_field('params', json.dumps(params), content_type='application/json')
+
+        headers = self._get_auth_headers()
+
+        try:
+            logger.info(f"Запуск генерации изображения: промпт='{prompt[:50]}...', размер={width}x{height}, pipeline_id={self.pipeline_id or 'не установлен'}")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.api_url}/key/api/v1/pipeline/run",
+                    headers=headers,
+                    data=data,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
+                    response_text = await response.text()
+                    
+                    if response.status == 401:
+                        logger.error(f"Ошибка авторизации (401). Проверьте:")
+                        logger.error(f"1. Правильность API ключа и Secret ключа")
+                        logger.error(f"2. Не истек ли срок действия ключей")
+                        logger.error(f"3. Формат заголовков авторизации")
+                        logger.error(f"Используемые заголовки: X-Key={self.api_key[:10]}..., X-Secret={self.secret_key[:10]}...")
+                        raise Exception(f"{self.model_name} API error 401: Unauthorized. Проверьте правильность API ключей и Secret ключа.")
+                    
+                    if response.status != 200 and response.status - 200 > 99:  # Костылек)
+                        logger.error(f"Ошибка API {self.model_name}: {response.status}, {response_text}")
+                        raise Exception(f"{self.model_name} API error {response.status}: {response_text}")
+                    
+                    try:
+                        result = json.loads(response_text)
+                        # Проверяем, не вернул ли сервис статус недоступности
+                        if 'pipeline_status' in result:
+                            status = result.get('pipeline_status')
+                            raise Exception(f"Сервис недоступен: {status}")
+                        
+                        uuid = result.get('uuid')
+                        if not uuid:
+                            raise Exception(f"Не получен UUID от {self.model_name}: {response_text}")
+                        logger.info(f"Генерация запущена, UUID: {uuid}")
+                        return uuid
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Ошибка парсинга JSON ответа: {e}, Сырой ответ: {response_text}")
+                        raise Exception(f"Ошибка парсинга ответа от {self.model_name}: {str(e)}")
+                        
+        except asyncio.TimeoutError:
+            logger.error(f"Таймаут запроса к {self.model_name}")
+            raise Exception(f"Превышено время ожидания ответа от {self.model_name}. Попробуйте еще раз.")
+        except aiohttp.ClientError as e:
+            logger.error(f"Ошибка сети при запросе к {self.model_name}: {e}")
+            raise Exception(f"Ошибка сети при подключении к {self.model_name}: {str(e)}")
+        except Exception as e:
+            logger.error(f"Неизвестная ошибка при работе с {self.model_name}: {e}")
+            raise
+
+    async def _check_status(self, uuid: str) -> Dict:
+        """Проверяет статус генерации по UUID."""
+        headers = self._get_auth_headers()
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.api_url}/key/api/v1/pipeline/status/{uuid}",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
+                    response_text = await response.text()
+                    
+                    if response.status != 200:
+                        logger.error(f"Ошибка проверки статуса {self.model_name}: {response.status}, {response_text}")
+                        raise Exception(f"{self.model_name} status check error {response.status}: {response_text}")
+                    
+                    try:
+                        result = json.loads(response_text)
+                        return result
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Ошибка парсинга JSON статуса: {e}, Сырой ответ: {response_text}")
+                        raise Exception(f"Ошибка парсинга статуса от {self.model_name}: {str(e)}")
+                        
+        except asyncio.TimeoutError:
+            logger.error(f"Таймаут проверки статуса {self.model_name}")
+            raise Exception(f"Превышено время ожидания статуса от {self.model_name}.")
+        except aiohttp.ClientError as e:
+            logger.error(f"Ошибка сети при проверке статуса {self.model_name}: {e}")
+            raise Exception(f"Ошибка сети при проверке статуса {self.model_name}: {str(e)}")
+
+    async def _wait_for_completion(self, uuid: str) -> Dict:
+        """Ожидает завершения генерации и возвращает результат."""
+        logger.info(f"Ожидание завершения генерации, UUID: {uuid}")
+        
+        for attempt in range(self.max_poll_attempts):
+            status_data = await self._check_status(uuid)
+            status = status_data.get('status')
+            
+            if status == 'DONE':
+                logger.info(f"Генерация завершена успешно, UUID: {uuid}")
+                return status_data
+            elif status == 'FAIL':
+                error_message = status_data.get('errorDescription', status_data.get('error', 'Неизвестная ошибка'))
+                logger.error(f"Генерация завершилась с ошибкой, UUID: {uuid}, ошибка: {error_message}")
+                raise Exception(f"Ошибка генерации изображения: {error_message}")
+            
+            # Статус IN_PROGRESS или другой - продолжаем ожидание
+            logger.debug(f"Генерация в процессе (попытка {attempt + 1}/{self.max_poll_attempts}), UUID: {uuid}")
+            await asyncio.sleep(self.poll_interval)
+        
+        raise Exception(f"Превышено максимальное время ожидания генерации изображения (UUID: {uuid})")
+
+    async def _get_image_bytes(self, image_base64: str) -> bytes:
+        """Конвертирует base64 строку в байты изображения."""
+        try:
+            # Убираем префикс data:image/...;base64, если есть
+            if ',' in image_base64:
+                image_base64 = image_base64.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_base64)
+            return image_bytes
+        except Exception as e:
+            logger.error(f"Ошибка декодирования base64 изображения: {e}")
+            raise Exception(f"Ошибка декодирования изображения: {str(e)}")
+
+    async def generate(
+        self,
+        prompt: str,
+        width: int = 1024,
+        height: int = 1024,
+        images: int = 1,
+        negative_prompt: Optional[str] = None,
+    ) -> bytes:
+        """
+        Генерирует изображение по промпту.
+        
+        Args:
+            prompt: Текстовое описание изображения
+            width: Ширина изображения в пикселях
+            height: Высота изображения в пикселях
+            images: Количество изображений (по умолчанию 1)
+            negative_prompt: Негативный промпт (опционально)
+        
+        Returns:
+            bytes: Байты сгенерированного изображения (PNG)
+        """
+        # Предобработка промпта, временное решение, позже нужно сделать полноценный prompt builder
+        sections = ["Качественное изображение, реализм, 4k, нет искажений, ",
+                    "соответствует описанию, реальное изображение. ",
+                    "Нет артефактов и искажений. "]
+
+        people_keys = ["человек", "люди", "мужчина", "женщина", "ребенок"]  # Переделать
+        if any(word in prompt for word in people_keys):
+            sections.append("У людей нормальные руки и ноги, люди изображены отчетливо. ")
+
+        sections.append(f"Описание изображения: {prompt}")
+
+        prompt = "\n".join(sections).strip()
+
+        # Запускаем генерацию
+        uuid = await self._start_generation(prompt, width, height, images, negative_prompt)
+        
+        # Ожидаем завершения
+        result = await self._wait_for_completion(uuid)
+        
+        # Получаем изображение из результата
+        # По документации API изображения находятся в result.result.files
+        result_data = result.get('result', {})
+        images_data = result_data.get('files', [])
+        if not images_data:
+            raise Exception("Не получены изображения в результате генерации")
+        
+        # Берем первое изображение
+        first_image_base64 = images_data[0]
+        image_bytes = await self._get_image_bytes(first_image_base64)
+        
+        logger.info(f"Успешно сгенерировано изображение, размер: {len(image_bytes)} байт")
+        return image_bytes
+
+
+def create_fusion_brain_image_generator() -> FusionBrainImageGenerator:
+    """Фабричная функция для создания генератора изображений Fusion Brain."""
+    from src.config import config
+    if not config.FUSION_BRAIN_API_KEY or not config.FUSION_BRAIN_SECRET_KEY:
+        raise ValueError(
+            "FUSION_BRAIN_API_KEY и FUSION_BRAIN_SECRET_KEY должны быть установлены в .env файле"
+        )
+    
+    return FusionBrainImageGenerator(
+        api_key=config.FUSION_BRAIN_API_KEY,
+        secret_key=config.FUSION_BRAIN_SECRET_KEY,
+        api_url=config.FUSION_BRAIN_API_URL,
+        pipeline_id="",  # Будет получен динамически при первой генерации
+        timeout=config.FUSION_BRAIN_TIMEOUT,
+        poll_interval=config.FUSION_BRAIN_POLL_INTERVAL,
+        max_poll_attempts=config.FUSION_BRAIN_MAX_POLL_ATTEMPTS,
+    )
+

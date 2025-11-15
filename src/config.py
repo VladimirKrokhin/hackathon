@@ -28,6 +28,14 @@ class Config(BaseSettings):
     YANDEXGPT_TIMEOUT: int = 30  # секунд
     PLAYWRIGHT_TIMEOUT: int = 60000  # 60 секунд
 
+    # FusionBrain API настройки
+    FUSION_BRAIN_API_KEY: str = Field(default="", env="FUSION_BRAIN_API_KEY")
+    FUSION_BRAIN_SECRET_KEY: str = Field(default="", env="FUSION_BRAIN_SECRET_KEY")
+    FUSION_BRAIN_API_URL: str = Field(default="https://api-key.fusionbrain.ai/", env="FUSION_BRAIN_API_URL")
+    FUSION_BRAIN_TIMEOUT: int = Field(default=60, env="FUSION_BRAIN_TIMEOUT")  # секунд
+    FUSION_BRAIN_POLL_INTERVAL: int = Field(default=10, env="FUSION_BRAIN_POLL_INTERVAL")  # секунд
+    FUSION_BRAIN_MAX_POLL_ATTEMPTS: int = Field(default=10, env="FUSION_BRAIN_MAX_POLL_ATTEMPTS")
+
     # Размеры для соцсетей
     SOCIAL_MEDIA_SIZES: Dict[str, Dict[str, Dict[str, int]]] = {
         "📱 ВКонтакте (для молодежи)": {
