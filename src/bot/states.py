@@ -45,3 +45,8 @@ class NGOInfo(StatesGroup):
     waiting_for_ngo_activities = State()
     waiting_for_ngo_contact = State()
     waiting_for_ngo_confirmation = State()
+
+
+class ImageGeneration(StatesGroup):
+    waiting_for_prompt = State()
+    waiting_for_size = State()

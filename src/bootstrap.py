@@ -16,6 +16,8 @@ from infrastructure.gpt import YandexGPT
 from infrastructure.database import init_database, get_db_session
 from infrastructure.repositories.ngo_repository import NGORepository
 from services.ngo_service import NGOService
+from infrastructure.image_generation import create_fusion_brain_image_generator
+from services.image_generation import ImageGenerationService
 
 
 
@@ -90,6 +92,16 @@ async def build_services(bot: Bot, dispatcher: Dispatcher):
 
     dp["text_content_generation_service"]: TextContentGenerationService = await _create_content_generation_service()
     dp["card_generation_service"]: CardGenerationService = await _create_card_generation_service(bot, dp) 
+    
+    # Инициализируем сервис генерации изображений
+    try:
+        image_generator = create_fusion_brain_image_generator()
+        image_generation_service = ImageGenerationService(image_generator=image_generator)
+        dp["image_generation_service"] = image_generation_service
+        logger.info("Сервис генерации изображений успешно инициализирован")
+    except Exception as e:
+        logger.warning(f"Не удалось инициализировать сервис генерации изображений: {e}")
+        dp["image_generation_service"] = None
     
     # Инициализируем сервис НКО
     init_database()  # Инициализируем базу данных
