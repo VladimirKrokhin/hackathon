@@ -17,6 +17,7 @@ from bot.utils import (
     get_template_by_platform,
     get_title_by_goal,
 )
+from services.card_generation import CardGenerationService
 
 generation_router = Router(name="generation")
 
@@ -68,7 +69,9 @@ async def user_text_handler(message: Message, state: FSMContext):
         }
 
         template_name = get_template_by_platform(platform)
-        cards = await dp["card_generation_service"].generate_multiple_cards(
+        card_generation_service: CardGenerationService = dp["card_generation_service"]
+
+        cards = await card_generation_service.generate_multiple_cards(
             template_name=template_name,
             data=template_data,
             platform=platform,
