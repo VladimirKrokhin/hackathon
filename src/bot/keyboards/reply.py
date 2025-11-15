@@ -129,6 +129,7 @@ NGO_MAIN_OPTIONS = [
     "✨ Создать контент без НКО", 
     "📝 Создать контент (структурированная форма)",
     "💭 Создать контент (свободная форма)",
+    "🎨 Сгенерировать изображение",
     "✏️ Редактировать контент",
     "📋 Посмотреть мою НКО",
     "🔄 Обновить данные НКО",
@@ -165,3 +166,23 @@ def get_frequency_keyboard() -> ReplyKeyboardMarkup:
     rows = [[option] for option in FREQUENCY_OPTIONS]
     rows.append([CUSTOM_OPTION])
     return _build_keyboard(rows)
+
+
+# Размеры изображений
+IMAGE_SIZE_OPTIONS = [
+    "📱 Квадрат (1024x1024)",
+    "📺 Горизонтальное (1200x630)",
+    "📱 Вертикальное (630x1200)",
+]
+
+CANCEL_OPTION = "❌ Отмена"
+
+
+def get_image_size_keyboard() -> ReplyKeyboardMarkup:
+    rows = [[option] for option in IMAGE_SIZE_OPTIONS]
+    rows.append([CANCEL_OPTION])
+    return _build_keyboard(rows, one_time=True)
+
+
+def get_cancel_keyboard() -> ReplyKeyboardMarkup:
+    return _build_keyboard([[CANCEL_OPTION]], one_time=True)
