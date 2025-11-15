@@ -57,7 +57,7 @@ async def details_handler(message: Message, state: FSMContext):
 
     data = await state.get_data()
 
-    await message.answer("🧠 Генерирую контент-план с помощью YandexGPT...")
+    await message.answer("🧠 Генерирую контент-план...")
 
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
