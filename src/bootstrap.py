@@ -3,6 +3,8 @@ from types import CoroutineType
 
 from aiogram import Bot, Dispatcher, Router
 from playwright.async_api import async_playwright, Browser
+from playwright.async_api import Playwright
+
 
 from config import config
 from bot.handlers import router
@@ -14,28 +16,12 @@ from services.card_generation import CardGenerationService
 from infrastructure.gpt import YandexGPT
 
 
+
 logger = logging.getLogger(__name__)
 
 
-async def init_browser() -> tuple[Browser, CoroutineType]:
-    playwright = await async_playwright().start()
-    browser = await playwright.chromium.launch(
-        headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-        ],
-    )
-    return (browser, playwright)
 
-async def close_browser(browser: Browser, playwright: CoroutineType) -> None:
-    await browser.close()
-    await playwright.stop()
-
-
-def build_yandexgpt_content_generation_service() -> ContentGenerationService:
+async def build_yandexgpt_content_generation_service() -> ContentGenerationService:
     response_processor = YandexGPTResponseProcessor()
     gpt_client = YandexGPT()
     prompt_builder = YandexGPTPromptBuilder()
@@ -50,13 +36,37 @@ def build_yandexgpt_content_generation_service() -> ContentGenerationService:
 
 
 
-def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatcher) -> CardGenerationService:
+async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatcher) -> CardGenerationService:
     """Получение сервиса генерации карточек."""
-    dp = dispatcher
-    browser = dp["browser"]
 
-    if browser is None:
-        raise ValueError("Не инициализирован браузер!")
+    async def init_browser() -> tuple[Browser, Playwright]:
+        logger.info("Инициализирую браузер Playwright...")
+        playwright: Playwright = await async_playwright().start()
+        browser: Browser = await playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
+        )
+        return (browser, playwright)
+
+    async def close_browser(browser: Browser, playwright: Playwright) -> None:
+        logger.info("Закрываю браузер Playwright...")
+        await browser.close()
+        await playwright.stop()
+
+    dp = dispatcher
+
+    browser, playwright = await init_browser()
+
+    dp["browser"]: Browser = browser
+    dp["playwright"]: Playwright = playwright
+
+    dp["on_shutdown"] = lambda: close_browser(browser, playwright)
+    
 
     card_generator = PlaywrightCardGenerator(browser=browser)
     service = CardGenerationService(card_generator=card_generator)
@@ -64,25 +74,24 @@ def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatcher) -
 
 
 
+_create_content_generation_service: ContentGenerationService = build_yandexgpt_content_generation_service
+_create_card_generation_service: CardGenerationService = build_playwright_card_generation_service
 
-get_content_generation_service = build_yandexgpt_content_generation_service
-get_card_generation_service = build_playwright_card_generation_service
 
+async def build_services(bot: Bot, dispatcher: Dispatcher):
+    dp = dispatcher
+
+    dp["content_generation_service"]: ContentGenerationService = await _create_content_generation_service()
+    dp["card_generation_service"]: CardGenerationService = await _create_card_generation_service(bot, dp) 
 
 
 async def on_startup(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], router: Router):
     """Действия при запуске бота."""
     logger.info("Инициализация бота и подготовка окружения")
 
-    dp = dispatcher
+    await build_services(bot, dispatcher)
 
-    browser, playwright = await init_browser()
-    
-    dp["browser"] = browser
-    dp["playwright"] = playwright
 
-    dp["content_generation_service"] = get_content_generation_service()
-    dp["card_generation_service"] = get_card_generation_service(bot, dp) 
 
 
 async def on_shutdown(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], router: Router):
@@ -91,10 +100,10 @@ async def on_shutdown(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], r
 
     dp = dispatcher
 
-    browser = dp["browser"]
-    playwright = dp["playwright"]
+    on_shutdown = dp.get("on_shutdown")
 
-    await close_browser(browser, playwright)
+    if on_shutdown:
+        await on_shutdown()
 
 
 
