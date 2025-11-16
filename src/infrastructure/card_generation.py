@@ -81,7 +81,9 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                 'contact_info': '',
                 'stats': [],
                 'cta_text': '',
-                'cta_link': '#'
+                'cta_link': '#',
+                'adress': 'г.Москва, улица Пушкина, дом 55',
+                'date_time': '16 ноября | 18:00'
             }
             
             # Данные из 'data' перезапишут значения по умолчанию
