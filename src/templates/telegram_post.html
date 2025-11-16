@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="a">
+    <main class="a{% if background_image %} has-background-image{% endif %}"{% if background_image %} style="--background-image: {{ background_image }}"{% endif %}>
       <div class="element" aria-hidden="true"></div>
       <div class="div" aria-hidden="true"></div>
       <div class="element-2" aria-hidden="true"></div>
@@ -20,7 +20,6 @@
       <section class="group">
         <div class="div-wrapper">
           <h1 class="p">
-<!--            <span class="span">ОТКРЫВАЕМ <span style="font-weight: bold;">ПУНКТЫ ОБОГРЕВА</span> ОТКРЫВАЕМ ПУНКТЫ ОБОГРЕВА</span>-->
             <span class="span">
               {{ title | default('ОТКРЫВАЕМ <span style="font-weight: bold;">ПУНКТЫ ОБОГРЕВА</span> ОТКРЫВАЕМ ПУНКТЫ ОБОГРЕВА') }}
             </span>

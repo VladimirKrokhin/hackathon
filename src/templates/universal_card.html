@@ -36,6 +36,16 @@
             flex-direction: column;
         }
 
+        .card.has-background-image {
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+        }
+
+        .card.has-background-image .card-content {
+            background: rgba(255, 255, 255, 0.95);
+        }
+
         .card-header {
             background: linear-gradient(135deg, {{ primary_color | default('#667eea') }} 0%, {{ secondary_color | default('#764ba2') }} 100%);
             color: white;
@@ -147,7 +157,7 @@
     </style>
 </head>
 <body>
-    <div class="card">
+    <div class="card{% if background_image %} has-background-image{% endif %}"{% if background_image %} style="background-image: {{ background_image }};"{% endif %}>
         <div class="card-header">
             <h1 class="card-title">{{ title | default('Контент от НКО') }}</h1>
             

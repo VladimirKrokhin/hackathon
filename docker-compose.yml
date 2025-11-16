@@ -1,0 +1,15 @@
+services:
+  publichun-bot:
+    build: .
+    container_name: publichun-bot
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    volumes:
+      # Монтируем базу данных для сохранения данных между перезапусками
+      - ./src/ngo_data.db:/app/src/ngo_data.db
+    # При необходимости раскомментировать для отладки
+    # ports:
+    #   - "8000:8000"
