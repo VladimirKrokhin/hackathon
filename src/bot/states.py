@@ -16,9 +16,20 @@ class ContentGeneration(StatesGroup):
     waiting_for_narrative_style = State()
     waiting_for_platform = State()
 
+    # Выбор источника изображения
+    waiting_for_image_source = State()
+    waiting_for_image_prompt = State()
+    waiting_for_user_image = State()
+
+    # Свободная форма - выбор изображения
+    waiting_for_free_image_source = State()
+    waiting_for_free_image_prompt = State()
+    waiting_for_free_user_image = State()
+
     # Свободная форма
     waiting_for_user_description = State()
     waiting_for_free_style = State()
+    waiting_for_free_platform = State()
 
     # Общие состояния
     waiting_for_confirmation = State()

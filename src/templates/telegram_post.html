@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="a">
+    <main class="a{% if background_image %} has-background-image{% endif %}"{% if background_image %} style="--background-image: {{ background_image }}"{% endif %}>
       <div class="element" aria-hidden="true"></div>
       <div class="div" aria-hidden="true"></div>
       <div class="element-2" aria-hidden="true"></div>

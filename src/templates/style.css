@@ -9,6 +9,22 @@
   position: relative;
 }
 
+/* Стили для простого шаблона карточки */
+.card {
+  background-color: #ffffff;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  min-width: 600px;
+  min-height: 800px;
+  position: relative;
+  font-family: Arial, sans-serif;
+}
+
+.card.has-background-image {
+  background-image: var(--background-image);
+}
+
 .a .element {
   position: absolute;
   top: 1019px;
@@ -81,6 +97,15 @@
   width: 1080px;
   height: 1019px;
   background-color: #00ff42;
+}
+
+/* Применяем фоновое изображение к rectangle элементу */
+.a.has-background-image .rectangle {
+  background-image: var(--background-image);
+  background-color: transparent;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .a .group {

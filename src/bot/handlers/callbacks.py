@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message, ReplyKeyboardRemove
 
 from bot.handlers.start import start_handler
-from bot.states import ContentGeneration
+from bot.states import ContentGeneration, ContentPlan
 from app import dp
 
 callbacks_router = Router(name="callbacks")
@@ -348,6 +348,22 @@ async def get_tips_handler(callback: CallbackQuery, state: FSMContext):
             ]
         ),
     )
+
+
+@callbacks_router.callback_query(F.data == "content_plan")
+async def content_plan_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик контент-плана - запускает функцию составления контент-плана."""
+    await callback.answer()
+    from bot.keyboards.inline import get_period_keyboard
+
+    await state.clear()
+    await callback.message.answer(
+        "📅 Давайте создадим контент-план для ваших постов!\n\n"
+        "На какой период вы хотите подготовить план?",
+        reply_markup=get_period_keyboard(),
+    )
+    from bot.states import ContentPlan
+    await state.set_state(ContentPlan.waiting_for_period)
 
 
 @callbacks_router.callback_query(F.data == "edit_text")
@@ -947,3 +963,89 @@ def get_image_generation_keyboard():
     """Получить клавиатуру генерации изображений."""
     from bot.keyboards.inline import get_image_generation_keyboard as func
     return func()
+
+
+# === ОБРАБОТЧИКИ ДЛЯ КОНТЕНТ-ПЛАНА ===
+
+@callbacks_router.callback_query(F.data == "period_3days")
+async def period_3days_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора периода 3 дня."""
+    await period_callback_handler(callback, state, "3 дня")
+
+
+@callbacks_router.callback_query(F.data == "period_week")
+async def period_week_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора периода неделя."""
+    await period_callback_handler(callback, state, "Неделя")
+
+
+@callbacks_router.callback_query(F.data == "period_month")
+async def period_month_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора периода месяц."""
+    await period_callback_handler(callback, state, "Месяц")
+
+
+async def period_callback_handler(callback: CallbackQuery, state: FSMContext, period: str):
+    """Общий обработчик для выбора периода контент-плана."""
+    await callback.answer()
+    await state.update_data(period=period)
+
+    from bot.keyboards.inline import get_frequency_keyboard
+    await callback.message.answer(
+        "🔁 Какая частота публикаций должна быть?",
+        reply_markup=get_frequency_keyboard(),
+    )
+    await state.set_state(ContentPlan.waiting_for_frequency)
+
+
+@callbacks_router.callback_query(F.data == "period_custom")
+async def period_custom_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора своего варианта периода."""
+    await callback.answer()
+
+    await callback.message.answer(
+        "🖊️ Введите свой вариант периода.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await state.set_state(ContentPlan.waiting_for_custom_period)
+
+
+@callbacks_router.callback_query(F.data == "frequency_daily")
+async def frequency_daily_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора частоты каждый день."""
+    await frequency_callback_handler(callback, state, "каждый день")
+
+
+@callbacks_router.callback_query(F.data == "frequency_every_two_days")
+async def frequency_every_two_days_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора частоты раз в два дня."""
+    await frequency_callback_handler(callback, state, "раз в два дня")
+
+
+async def frequency_callback_handler(callback: CallbackQuery, state: FSMContext, frequency: str):
+    """Общий обработчик для выбора частоты контент-плана."""
+    await callback.answer()
+    await state.update_data(frequency=frequency)
+
+    await callback.message.answer(
+        "📄 Теперь распишите, на какие темы должен быть ориентирован контент-план.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await state.set_state(ContentPlan.waiting_for_themes)
+
+
+@callbacks_router.callback_query(F.data == "frequency_custom")
+async def frequency_custom_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора своего варианта частоты."""
+    await callback.answer()
+
+    await callback.message.answer(
+        "🖊️ Введите свой вариант частоты публикаций.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await state.set_state(ContentPlan.waiting_for_custom_frequency)
+
+
+# === ДОБАВЛЕННЫЕ ОБРАБОТЧИКИ КОНТЕНТ-ПЛАНА ===
+# TODO: Эти обработчики нужно добавить в content_plan.py как message handlers
+# Сейчас они удалены из callbacks.py, поскольку @callbacks_router.callback_query не подходит для текстовых сообщений

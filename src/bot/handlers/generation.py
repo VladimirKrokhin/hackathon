@@ -77,6 +77,54 @@ async def complete_generation_handler(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove(),
         )
 
+    # Обработка изображения для карточки
+    image_source = data.get("image_source")
+    user_image = data.get("user_image")
+    image_prompt = data.get("image_prompt")
+    generated_image = None
+
+    logger.info(f"Обработка изображения: source={image_source}, user_image={'есть' if user_image else 'нет'}, prompt={image_prompt[:50] + '...' if image_prompt and len(image_prompt) > 50 else image_prompt}")
+
+    if image_source == "🤖 Сгенерировать ИИ" and image_prompt:
+        await message.answer(
+            "🎨 Генерирую изображение ИИ...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        try:
+            image_generation_service = dp.get("image_generation_service")
+            if not image_generation_service:
+                raise Exception("Сервис генерации изображений не инициализирован")
+
+            # Формируем умный промпт для генерации изображения
+            smart_prompt = image_prompt
+            if data.get("generation_mode") == "structured":
+                event_context = f". Стиль: иллюстрация к событию '{data.get('event_type', '')}' в '{data.get('event_place', '')}' для '{data.get('event_audience', '')}'"
+                smart_prompt += event_context
+            generated_image = await image_generation_service.generate_image(
+                prompt=smart_prompt,
+                width=1024,
+                height=768
+            )
+            await message.answer(
+                "✅ Изображение ИИ готово!",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+        except Exception as e:
+            logger.exception(f"Ошибка генерации изображения ИИ: {e}")
+            await message.answer(
+                "⚠️ Не удалось сгенерировать изображение ИИ. Продолжаю с карточками без изображения.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+    elif image_source == "📎 Загрузить своё" and user_image:
+        logger.info("Используем пользовательское изображение")
+        await message.answer(
+            "🎨 Использую ваше изображение...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        generated_image = user_image
+    else:
+        logger.info("Изображение не будет использовано")
+
     await message.answer(
         "🎨 Создаю информационные карточки...",
         reply_markup=ReplyKeyboardRemove(),
@@ -88,7 +136,7 @@ async def complete_generation_handler(message: Message, state: FSMContext):
             subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
         else:
             subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
-        
+
         template_data = {
             "title": get_title_by_goal(goal),
             "subtitle": subtitle,
@@ -100,6 +148,12 @@ async def complete_generation_handler(message: Message, state: FSMContext):
             "text_color": "#333333",
             "background_color": "#f5f7fa",
         }
+
+        # Добавляем изображение в данные шаблона если есть
+        if generated_image:
+            import base64
+            image_base64 = base64.b64encode(generated_image).decode('utf-8')
+            template_data["background_image"] = f"data:image/png;base64,{image_base64}"
 
         template_name = get_template_by_platform(platform)
         card_generation_service: CardGenerationService = dp["card_generation_service"]
