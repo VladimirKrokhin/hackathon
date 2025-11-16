@@ -25,7 +25,7 @@ class Config(BaseSettings):
     DEBUG: bool = Field(default=False, env="DEBUG")
     
     # Таймауты
-    YANDEXGPT_TIMEOUT: int = 30  # секунд
+    YANDEXGPT_TIMEOUT: int = 60  # секунд
     PLAYWRIGHT_TIMEOUT: int = 60000  # 60 секунд
 
     # FusionBrain API настройки
