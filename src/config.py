@@ -42,7 +42,7 @@ class Config(BaseSettings):
             "post": {"width": 510, "height": 510},
         },
         "💬 Telegram (для взрослых/бизнеса)": {
-            "post": {"width": 1200, "height": 630},
+            "post": {"width": 1080, "height": 1528},
         },
         "🌐 Сайт/новостная рассылка": {
             "og": {"width": 1200, "height": 630},

@@ -4,9 +4,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta charset="utf-8" />
     <title>{{ title | default('Контент от НКО') }}</title>
-    <link rel="stylesheet" href="globals.css" />
-    <link rel="stylesheet" href="styleguide.css" />
-    <link rel="stylesheet" href="style.css" />
+    <style>
+      {% include 'globals.css' %}
+      {% include 'styleguide.css' %}
+      {% include 'style.css' %}
+    </style>
   </head>
   <body>
     <main class="a">
