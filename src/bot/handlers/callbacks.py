@@ -350,6 +350,48 @@ async def get_tips_handler(callback: CallbackQuery, state: FSMContext):
     )
 
 
+@callbacks_router.callback_query(F.data == "edit_text")
+async def edit_text_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик редактирования текста - запускает процесс редактирования."""
+    await callback.answer()
+    await state.clear()
+
+    await callback.message.answer(
+        "📝 Редактирование текста\n\n"
+        "Эта функция поможет исправить грамматику, орфографию, стиль и логику вашего текста.\n\n"
+        "**Что сделать?**",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Начать редактирование", callback_data="start_text_editing")],
+                [InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="back_to_main")]
+            ]
+        ),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+@callbacks_router.callback_query(F.data == "start_text_editing")
+async def start_text_editing_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик начала редактирования текста."""
+    await callback.answer()
+    from bot.states import EditText
+
+    await state.clear()
+    await state.set_state(EditText.waiting_for_text)
+
+    await callback.message.edit_text(
+        "📝 **Редактирование текста**\n\n"
+        "Введите полностью текст, который нужно исправить.\n\n"
+        "_Вы можете отправить любой текст для исправления грамматики, орфографии, стиля и логики._",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="back_to_main")]
+            ]
+        ),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
 @callbacks_router.callback_query(F.data == "refactor_content")
 async def refactor_content_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(

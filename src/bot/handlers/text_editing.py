@@ -18,11 +18,15 @@ logger = logging.getLogger(__name__)
 
 @text_editing_router.message(Command("edittext"))
 async def start_edit_text(message: Message, state: FSMContext):
+    from bot.keyboards.inline import get_main_menu_keyboard
+
     await state.clear()
     await message.answer(
-        "📝 Давайте отредактируем ваш текст!\n\n"
-        "Введите полностью текст, который нужно исправить.",
-        reply_markup=ReplyKeyboardRemove(),
+        "📝 **Редактирование текста через команду**\n\n"
+        "Введите полностью текст, который нужно исправить.\n\n"
+        "_Вы можете использовать эту команду или кнопки в меню._",
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
     await state.set_state(EditText.waiting_for_text)
@@ -30,32 +34,64 @@ async def start_edit_text(message: Message, state: FSMContext):
 
 @text_editing_router.message(EditText.waiting_for_text, F.text)
 async def text_handler(message: Message, state: FSMContext):
+    from bot.keyboards.inline import get_skip_keyboard, get_main_menu_keyboard
+
     text_to_edit = message.text.strip()
     if not text_to_edit:
         await message.answer(
-            "Пожалуйста, напишите текст, который хотите исправить.",
-            reply_markup=ReplyKeyboardRemove(),
+            "⚠️ Пожалуйста, напишите текст, который хотите исправить.",
+            reply_markup=get_main_menu_keyboard(),
         )
+        return
+
+    # Проверка на слишком короткий текст
+    if len(text_to_edit.strip()) < 3:
+        await message.answer(
+            "⚠️ Текст слишком короткий для редактирования. Введите текст не менее 3 символов.",
+            reply_markup=get_main_menu_keyboard(),
+        )
+        await state.clear()
         return
 
     await state.update_data(text_to_edit=text_to_edit)
 
+    # Проверяем наличие данных НКО для улучшения редактирования
+    from app import dp
+    ngo_service = dp["ngo_service"]
+    user_id = message.from_user.id
+
+    if ngo_service.ngo_exists(user_id):
+        ngo_data = ngo_service.get_ngo_data(user_id)
+        if ngo_data:
+            await state.update_data(
+                has_ngo_info=True,
+                ngo_name=ngo_data.get("ngo_name", ""),
+                ngo_description=ngo_data.get("ngo_description", ""),
+                ngo_activities=ngo_data.get("ngo_activities", ""),
+                ngo_contact=ngo_data.get("ngo_contact", ""),
+            )
+
     await message.answer(
-        "✒️ Хотели бы вы что-то уточнить при исправлении текста?",
-        reply_markup=get_skip_keyboard(),
+        "✒️ **Уточнение для редактирования**\n\n"
+        "Хотите ли вы добавить дополнительные инструкции или пожелания по редактированию текста?\n\n"
+        "_Например: «Сделать текст более формальным» или «Исправить только грамматику»_",
+        reply_markup=get_skip_keyboard("⏭️ Пропустить уточнения"),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(EditText.waiting_for_details)
 
 
 @text_editing_router.message(EditText.waiting_for_details, F.text)
 async def details_handler(message: Message, state: FSMContext):
+    from bot.keyboards.inline import get_main_menu_keyboard
+
     details = message.text.strip()
-    if details == "⏩ Пропустить":
+    if details == "⏭️ Пропустить уточнения":
         details = ""
     await state.update_data(details=details)
 
     data = await state.get_data()
-    
+
     # Данные НКО уже должны быть в состоянии после выбора пользователя
     # Если их нет, но пользователь хотел использовать НКО, попробуем получить из БД
     if data.get("has_ngo_info") and not data.get("ngo_name"):
@@ -72,9 +108,10 @@ async def details_handler(message: Message, state: FSMContext):
             await state.update_data(**data)
 
     await message.answer(
-        "✏️ Редактирую текст...",
+        "✏️ **Редактирую текст...**\n\n_Это может занять 10-30 секунд._",
         reply_markup=ReplyKeyboardRemove(),
-        )
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
@@ -83,19 +120,23 @@ async def details_handler(message: Message, state: FSMContext):
     except Exception as error:
         logger.exception("Ошибка при редактировании текста: %s", error)
         await message.answer(
-            "⚠️ Не удалось получить ответ.",
-            reply_markup=ReplyKeyboardRemove(),
+            "⚠️ **Не удалось отредактировать текст**\n\n"
+            "Попробуйте позже или обратитесь к администратору.",
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode=ParseMode.MARKDOWN,
         )
+        await state.clear()
         return
 
     await message.answer(
-        f"✅ Ваш отредактированный текст:",
+        f"✅ **Результат редактирования:**",
         reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await message.answer(
-        generated_text, 
+        generated_text,
         parse_mode=ParseMode.MARKDOWN,
-        reply_markup=ReplyKeyboardRemove(),
-        )
+        reply_markup=get_main_menu_keyboard(),
+    )
 
     await state.clear()

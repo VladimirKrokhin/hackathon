@@ -17,6 +17,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Создание контента", callback_data="create_content")],
+            [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data="edit_text")],
             [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data="generate_images")],
             [InlineKeyboardButton(text="📋 Информация о НКО", callback_data="ngo_info")]
         ]
