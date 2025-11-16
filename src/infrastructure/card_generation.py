@@ -93,25 +93,51 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                 'cta_text': '',
                 'cta_link': '#'
             }
-            
+
             # Данные из 'data' перезапишут значения по умолчанию
             template_data = {**defaults, **data}
+
+            # Детальная отладка данных шаблона
+            logger.info("=== JINJA2 TEMPLATE DATA DEBUG ===")
+            for key, value in template_data.items():
+                if key == 'background_image' and isinstance(value, str) and len(value) > 100:
+                    logger.info(f"{key}: [base64 image data, {len(value)} chars]")
+                else:
+                    logger.info(f"{key}: '{value}' (type: {type(value).__name__})")
+
+            # Проверяем критические переменные
+            critical_vars = ['title', 'content', 'org_name']
+            for var in critical_vars:
+                if not template_data.get(var):
+                    logger.warning(f"Критическая переменная '{var}' пуста или отсутствует!")
 
             # Получаем шаблон Jinja и рендерим его
             template_filename = template_name + ".html"
             template = self.jinja_env.get_template(template_filename)
             html_content = template.render(template_data)
-            
+
+            # Логируем информацию для отладки
+            logger.info(f"Jinja2 template: {template_filename}")
+            logger.info(f"Template data keys: {list(template_data.keys())}")
+            logger.info(f"HTML content length: {len(html_content)} chars")
+
+            # Журналируем первые 1000 символов отрендеренного HTML для отладки
+            logger.info(f"HTML content preview: {html_content[:1000]}...")
+            if 'Карточка' not in html_content and template_data.get('title'):
+                logger.warning("Отсутствие заголовка в HTML!")
+            if 'НКО' not in html_content and template_data.get('org_name'):
+                logger.warning("Отсутствие названия организации в HTML!")
+
             # Создаем временный HTML файл для правильной загрузки ресурсов
             unique_id = str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
             temp_filename = f"temp_card_{unique_id}.html"
             temp_file_path = TEMPLATES_DIR / temp_filename
-            
+
             # Записываем HTML в файл
             async with aiofiles.open(temp_file_path, 'w', encoding='utf-8') as f:
                 await f.write(html_content)
-            
-            logger.info(f"Создан временный файл: {temp_filename}")
+
+            logger.info(f"Created temp file: {temp_filename}")
             
             # Настраиваем размер
             await page.set_viewport_size({"width": width, "height": height})

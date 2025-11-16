@@ -257,12 +257,13 @@ async def platform_handler(message: Message, state: FSMContext):
 async def image_source_handler(message: Message, state: FSMContext):
     """Обработчик для выбора источника изображения."""
     image_source = message.text.strip()
-    
+
     image_source_options = [
         "🤖 Сгенерировать ИИ",
         "📎 Загрузить своё",
+        "🚫 Без фото",
     ]
-    
+
     if image_source not in image_source_options:
         await message.answer(
             "Пожалуйста, выберите источник изображения.",
@@ -271,7 +272,7 @@ async def image_source_handler(message: Message, state: FSMContext):
         return
 
     await state.update_data(image_source=image_source)
-    
+
     if image_source == "🤖 Сгенерировать ИИ":
         # Переходим к генерации ИИ
         await message.answer(
@@ -282,7 +283,7 @@ async def image_source_handler(message: Message, state: FSMContext):
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentGeneration.waiting_for_image_prompt)
-    else:  # "📎 Загрузить своё"
+    elif image_source == "📎 Загрузить своё":
         await message.answer(
             "📎 **Загрузите изображение**\n"
             "Пришлите фотографию или изображение, которое будет использовано в карточке. "
@@ -291,6 +292,15 @@ async def image_source_handler(message: Message, state: FSMContext):
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentGeneration.waiting_for_user_image)
+    else:  # "🚫 Без фото"
+        await message.answer(
+            "✅ **Выбрано: Без фото**\n"
+            "🎨 Создаем контент без изображения...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        # Переходим к генерации контента без фото
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(message, state)
 
 
 @new_generation_router.message(ContentGeneration.waiting_for_image_prompt, F.text)
@@ -485,6 +495,7 @@ async def free_image_source_handler(message: Message, state: FSMContext):
     image_source_options = [
         "🤖 Сгенерировать ИИ",
         "📎 Загрузить своё",
+        "🚫 Без фото",
     ]
 
     if image_source not in image_source_options:
@@ -506,7 +517,7 @@ async def free_image_source_handler(message: Message, state: FSMContext):
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentGeneration.waiting_for_free_image_prompt)
-    else:  # "📎 Загрузить своё"
+    elif image_source == "📎 Загрузить своё":
         await message.answer(
             "📎 **Загрузите изображение**\n"
             "Пришлите фотографию или изображение, которое будет использовано в карточке. "
@@ -515,6 +526,15 @@ async def free_image_source_handler(message: Message, state: FSMContext):
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentGeneration.waiting_for_free_user_image)
+    else:  # "🚫 Без фото"
+        await message.answer(
+            "✅ **Выбрано: Без фото**\n"
+            "🎨 Создаем контент без изображения...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        # Переходим к генерации контента без фото
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(message, state)
 
 
 @new_generation_router.message(ContentGeneration.waiting_for_free_image_prompt, F.text)

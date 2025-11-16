@@ -495,16 +495,16 @@ async def platform_instagram_handler(callback: CallbackQuery, state: FSMContext)
 
 
 async def platform_handler_common(callback: CallbackQuery, state: FSMContext, platform_name: str):
-    """Общий обработчик для всех платформ."""
+    """Общий обработчик для всех платформ - переход к выбору источника изображения."""
     await state.update_data(platform=platform_name)
-    
-    # Получаем все данные и переходим к генерации
-    data = await state.get_data()
-    data["user_text"] = f"Структурированная форма: {data.get('event_type', '')}"
-    
-    # Импортируем и вызываем генерацию
-    from bot.handlers.generation import complete_generation_handler
-    await complete_generation_handler(callback.message, state)
+
+    # Новый шаг: выбор источника изображения перед генерацией карточек
+    await callback.message.answer(
+        "🖼️ **Выберите источник тематической картинки для карточки:**",
+        reply_markup=get_image_source_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await state.set_state(ContentGeneration.waiting_for_image_source)
 
 
 # === НАВИГАЦИЯ ===
@@ -965,6 +965,12 @@ def get_image_generation_keyboard():
     return func()
 
 
+def get_image_source_keyboard():
+    """Получить клавиатуру выбора источника изображения."""
+    from bot.keyboards.inline import get_image_source_keyboard as func
+    return func()
+
+
 # === ОБРАБОТЧИКИ ДЛЯ КОНТЕНТ-ПЛАНА ===
 
 @callbacks_router.callback_query(F.data == "period_3days")
@@ -1044,6 +1050,480 @@ async def frequency_custom_handler(callback: CallbackQuery, state: FSMContext):
         reply_markup=ReplyKeyboardRemove(),
     )
     await state.set_state(ContentPlan.waiting_for_custom_frequency)
+
+
+# === ОБРАБОТЧИКИ ВЫБОРА ИСТОЧНИКА ИЗОБРАЖЕНИЯ ===
+@callbacks_router.callback_query(F.data == "image_source_ai")
+async def image_source_ai_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора ИИ для генерации изображения."""
+    await callback.answer()
+    await image_source_handler_common(callback, state, "🤖 Сгенерировать ИИ")
+
+
+@callbacks_router.callback_query(F.data == "image_source_upload")
+async def image_source_upload_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора загрузки своего изображения."""
+    await callback.answer()
+    await image_source_handler_common(callback, state, "📎 Загрузить своё")
+
+
+@callbacks_router.callback_query(F.data == "image_source_none")
+async def image_source_none_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора без фото."""
+    await callback.answer()
+    await image_source_handler_common(callback, state, "🚫 Без фото")
+
+
+# === ОБРАБОТЧИКИ ВЫБОРА ФОТО ДЛЯ КАРТОЧКИ ===
+@callbacks_router.callback_query(F.data == "card_photo_ai")
+async def card_photo_ai_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора ИИ для генерации фото карточки."""
+    await callback.answer()
+    await card_photo_handler_common(callback, state, "🤖 AI сгенерирует фото")
+
+
+@callbacks_router.callback_query(F.data == "card_photo_upload")
+async def card_photo_upload_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора загрузки своего фото для карточки."""
+    await callback.answer()
+    await card_photo_handler_common(callback, state, "📎 Загрузить своё фото")
+
+
+@callbacks_router.callback_query(F.data == "card_photo_none")
+async def card_photo_none_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора без фото для карточки."""
+    await callback.answer()
+    await card_photo_handler_common(callback, state, "🚫 Без фото")
+
+
+@callbacks_router.callback_query(F.data == "back_to_confirmation")
+async def back_to_confirmation_handler(callback: CallbackQuery, state: FSMContext):
+    """Возврат к подтверждению генерации."""
+    await callback.answer()
+    from bot.keyboards.inline import get_post_generation_keyboard
+    await callback.message.answer(
+        "✨ Что хотите сделать дальше?",
+        reply_markup=get_post_generation_keyboard(),
+    )
+    await state.set_state(ContentGeneration.waiting_for_confirmation)
+
+
+@callbacks_router.callback_query(F.data == "back_to_platform")
+async def back_to_platform_handler(callback: CallbackQuery, state: FSMContext):
+    """Возврат к выбору платформы."""
+    await callback.answer()
+    await callback.message.answer(
+        "📱 **На какой платформе будет публиковаться пост?**",
+        reply_markup=get_platform_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await state.set_state(ContentGeneration.waiting_for_platform)
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_image_prompt, F.text)
+async def callback_image_prompt_handler(message: Message, state: FSMContext):
+    """Обработчик для описания изображения ИИ в callbacks flow."""
+    image_prompt = message.text.strip()
+    if not image_prompt:
+        await message.answer(
+            "Пожалуйста, опишите желаемое изображение.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    await state.update_data(image_prompt=image_prompt)
+
+    # Переходим к генерации контента
+    from bot.handlers.generation import complete_generation_handler
+    await complete_generation_handler(message, state)
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_user_image, F.photo)
+async def callback_user_image_handler(message: Message, state: FSMContext):
+    """Обработчик для загрузки пользовательского изображения в callbacks flow."""
+    if not message.photo:
+        await message.answer(
+            "Пожалуйста, загрузите изображение (фото).",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    # Получаем наибольшее по размеру фото для лучшего качества
+    photo = message.photo[-1]
+
+    # Скачиваем изображение
+    from app import dp
+    bot = dp["bot"]
+
+    try:
+        image_file = await bot.download(photo.file_id, destination=None)
+        image_bytes = image_file.read()
+
+        await state.update_data(user_image=image_bytes)
+
+        await message.answer(
+            "✅ Изображение загружено!\n"
+            "🎨 Создаем контент с вашим изображением...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        # Переходим к генерации контента
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(message, state)
+
+    except Exception as e:
+        logger.exception(f"Ошибка при загрузке изображения: {e}")
+        await message.answer(
+            "❌ Ошибка при загрузке изображения. Попробуйте еще раз.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_user_image, F.document)
+async def callback_user_document_handler(message: Message, state: FSMContext):
+    """Обработчик для загрузки пользовательского документа с изображением в callbacks flow."""
+    if not message.document:
+        return
+
+    # Проверяем, что это изображение
+    mime_type = message.document.mime_type
+    if not mime_type or not mime_type.startswith('image/'):
+        await message.answer(
+            "Пожалуйста, отправьте файл с изображением (JPEG, PNG).",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    from app import dp
+    bot = dp["bot"]
+
+    try:
+        document_file = await bot.download(message.document.file_id, destination=None)
+        image_bytes = document_file.read()
+
+        await state.update_data(user_image=image_bytes)
+
+        await message.answer(
+            "✅ Изображение загружено!\n"
+            "🎨 Создаем контент с вашим изображением...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        # Переходим к генерации контента
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(message, state)
+
+    except Exception as e:
+        logger.exception(f"Ошибка при загрузке документа с изображением: {e}")
+        await message.answer(
+            "❌ Ошибка при загрузке изображения. Попробуйте еще раз.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_free_image_prompt, F.text)
+async def callback_free_image_prompt_handler(message: Message, state: FSMContext):
+    """Обработчик для описания изображения ИИ в free form callbacks flow."""
+    image_prompt = message.text.strip()
+    if not image_prompt:
+        await message.answer(
+            "Пожалуйста, опишите желаемое изображение.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    await state.update_data(image_prompt=image_prompt)
+
+    # Переходим к генерации контента
+    from bot.handlers.generation import complete_generation_handler
+    await complete_generation_handler(message, state)
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_free_user_image, F.photo)
+async def callback_free_user_image_handler(message: Message, state: FSMContext):
+    """Обработчик для загрузки пользовательского изображения в free form callbacks flow."""
+    if not message.photo:
+        await message.answer(
+            "Пожалуйста, загрузите изображение (фото).",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    # Получаем наибольшее по размеру фото для лучшего качества
+    photo = message.photo[-1]
+
+    # Скачиваем изображение
+    from app import dp
+    bot = dp["bot"]
+
+    try:
+        image_file = await bot.download(photo.file_id, destination=None)
+        image_bytes = image_file.read()
+
+        await state.update_data(user_image=image_bytes)
+
+        await message.answer(
+            "✅ Изображение загружено!\n"
+            "🎨 Создаем контент с вашим изображением...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        # Переходим к генерации контента
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(message, state)
+
+    except Exception as e:
+        logger.exception(f"Ошибка при загрузке изображения: {e}")
+        await message.answer(
+            "❌ Ошибка при загрузке изображения. Попробуйте еще раз.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_free_user_image, F.document)
+async def callback_free_user_document_handler(message: Message, state: FSMContext):
+    """Обработчик для загрузки пользовательского документа с изображением в free form callbacks flow."""
+    if not message.document:
+        return
+
+    # Проверяем, что это изображение
+    mime_type = message.document.mime_type
+    if not mime_type or not mime_type.startswith('image/'):
+        await message.answer(
+            "Пожалуйста, отправьте файл с изображением (JPEG, PNG).",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    from app import dp
+    bot = dp["bot"]
+
+    try:
+        document_file = await bot.download(message.document.file_id, destination=None)
+        image_bytes = document_file.read()
+
+        await state.update_data(user_image=image_bytes)
+
+        await message.answer(
+            "✅ Изображение загружено!\n"
+            "🎨 Создаем контент с вашим изображением...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        # Переходим к генерации контента
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(message, state)
+
+    except Exception as e:
+        logger.exception(f"Ошибка при загрузке документа с изображением: {e}")
+        await message.answer(
+            "❌ Ошибка при загрузке изображения. Попробуйте еще раз.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+
+async def image_source_handler_common(callback: CallbackQuery, state: FSMContext, image_source: str):
+    """Общий обработчик для выбора источника изображения."""
+    await state.update_data(image_source=image_source)
+
+    if image_source == "🤖 Сгенерировать ИИ":
+        # Переходим к генерации ИИ
+        await callback.message.answer(
+            "🎨 **Опишите желаемую картинку для карточки**\n"
+            "Опишите, как должна выглядеть иллюстрация к вашему посту. "
+            "Можете упомянуть стиль, цвета, настроение.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(ContentGeneration.waiting_for_image_prompt)
+    elif image_source == "📎 Загрузить своё":
+        await callback.message.answer(
+            "📎 **Загрузите изображение**\n"
+            "Пришлите фотографию или изображение, которое будет использовано в карточке. "
+            "Поддерживаемые форматы: JPEG, PNG.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(ContentGeneration.waiting_for_user_image)
+    else:  # "🚫 Без фото"
+        await callback.message.answer(
+            "✅ **Выбрано: Без фото**\n"
+            "🎨 Создаем контент без изображения...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        # Переходим к генерации контента без фото
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(callback.message, state)
+
+
+async def free_image_source_handler_common(callback: CallbackQuery, state: FSMContext, image_source: str):
+    """Общий обработчик для выбора источника изображения в free form."""
+    await state.update_data(image_source=image_source)
+
+    if image_source == "🤖 Сгенерировать ИИ":
+        # Переходим к генерации ИИ для free form
+        await callback.message.answer(
+            "🎨 **Опишите желаемую картинку для карточки**\n"
+            "Опишите, как должна выглядеть иллюстрация к вашему посту. "
+            "Можете упомянуть стиль, цвета, настроение.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(ContentGeneration.waiting_for_free_image_prompt)
+    elif image_source == "📎 Загрузить своё":
+        await callback.message.answer(
+            "📎 **Загрузите изображение**\n"
+            "Пришлите фотографию или изображение, которое будет использовано в карточке. "
+            "Поддерживаемые форматы: JPEG, PNG.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(ContentGeneration.waiting_for_free_user_image)
+    else:  # "🚫 Без фото"
+        await callback.message.answer(
+            "✅ **Выбрано: Без фото**\n"
+            "🎨 Создаем контент без изображения...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        # Переходим к генерации контента без фото
+        from bot.handlers.generation import complete_generation_handler
+        await complete_generation_handler(callback.message, state)
+
+
+async def card_photo_handler_common(callback: CallbackQuery, state: FSMContext, card_source: str):
+    """Общий обработчик для выбора источника фото для карточки."""
+    await state.update_data(card_image_source=card_source)
+
+    if card_source == "🤖 AI сгенерирует фото":
+        # Переходим к запросу промпта для генерации фото карточки
+        await callback.message.answer(
+            "🎨 **Опишите желаемое фото для карточки**\n"
+            "Опишите, какое фото должно быть на карточке. "
+            "Можете упомянуть тему, композицию, стиль.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(ContentGeneration.waiting_for_card_photo_prompt)
+    elif card_source == "📎 Загрузить своё фото":
+        await callback.message.answer(
+            "📎 **Загрузите фото для карточки**\n"
+            "Пришлите фотографию, которая будет использована в карточке. "
+            "Поддерживаемые форматы: JPEG, PNG.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(ContentGeneration.waiting_for_card_user_photo)
+    else:  # "🚫 Без фото"
+        await state.update_data(card_image_source="🚫 Без фото")
+        await callback.message.answer(
+            "✅ **Выбрано: Без фото для карточки**\n"
+            "🎨 Переходим к генерации карточек...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        # Переходим к генерации карточек без фото
+        from bot.handlers.generation import generate_cards_handler
+        await generate_cards_handler(callback.message, state)
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_card_photo_prompt, F.text)
+async def handle_card_photo_prompt(message: Message, state: FSMContext):
+    """Обработчик для описания фото карточки."""
+    card_prompt = message.text.strip()
+    if not card_prompt:
+        await message.answer(
+            "Пожалуйста, опишите желаемое фото для карточки.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    await state.update_data(card_image_prompt=card_prompt)
+
+    # Переходим к генерации карточек
+    from bot.handlers.generation import generate_cards_handler
+    await generate_cards_handler(message, state)
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_card_user_photo, F.photo)
+async def handle_card_user_photo(message: Message, state: FSMContext):
+    """Обработчик для загрузки пользовательского фото для карточки."""
+    if not message.photo:
+        await message.answer(
+            "Пожалуйста, загрузите изображение (фото).",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    # Получаем наибольшее по размеру фото для лучшего качества
+    photo = message.photo[-1]
+
+    # Скачиваем изображение
+    from app import dp
+    bot = dp["bot"]
+
+    try:
+        image_file = await bot.download(photo.file_id, destination=None)
+        image_bytes = image_file.read()
+
+        await state.update_data(card_user_image=image_bytes)
+
+        await message.answer(
+            "✅ Фото для карточки загружено!\n"
+            "🎨 Создаем карточки с вашим фото...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        # Переходим к генерации карточек
+        from bot.handlers.generation import generate_cards_handler
+        await generate_cards_handler(message, state)
+
+    except Exception as e:
+        logger.exception(f"Ошибка при загрузке фото для карточки: {e}")
+        await message.answer(
+            "❌ Ошибка при загрузке фото. Попробуйте еще раз.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+
+@callbacks_router.message(ContentGeneration.waiting_for_card_user_photo, F.document)
+async def handle_card_user_document(message: Message, state: FSMContext):
+    """Обработчик для загрузки пользовательского документа с фото для карточки."""
+    if not message.document:
+        return
+
+    # Проверяем, что это изображение
+    mime_type = message.document.mime_type
+    if not mime_type or not mime_type.startswith('image/'):
+        await message.answer(
+            "Пожалуйста, отправьте файл с изображением (JPEG, PNG).",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    from app import dp
+    bot = dp["bot"]
+
+    try:
+        document_file = await bot.download(message.document.file_id, destination=None)
+        image_bytes = document_file.read()
+
+        await state.update_data(card_user_image=image_bytes)
+
+        await message.answer(
+            "✅ Фото для карточки загружено!\n"
+            "🎨 Создаем карточки с вашим фото...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        # Переходим к генерации карточек
+        from bot.handlers.generation import generate_cards_handler
+        await generate_cards_handler(message, state)
+
+    except Exception as e:
+        logger.exception(f"Ошибка при загрузке документа с фото для карточки: {e}")
+        await message.answer(
+            "❌ Ошибка при загрузке фото. Попробуйте еще раз.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
 
 
 # === ДОБАВЛЕННЫЕ ОБРАБОТЧИКИ КОНТЕНТ-ПЛАНА ===

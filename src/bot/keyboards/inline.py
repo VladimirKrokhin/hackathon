@@ -189,6 +189,7 @@ def get_image_source_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="🤖 Сгенерировать ИИ", callback_data="image_source_ai")],
             [InlineKeyboardButton(text="📎 Загрузить своё", callback_data="image_source_upload")],
+            [InlineKeyboardButton(text="🚫 Без фото", callback_data="image_source_none")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_platform")]
         ]
     )
@@ -325,5 +326,17 @@ def get_image_size_inline_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📺 Горизонтал (1200×630)", callback_data="image_size_1200x630")],
             [InlineKeyboardButton(text="📱 Вертикал (630×1200)", callback_data="image_size_630x1200")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_style_selection")]
+        ]
+    )
+
+
+def get_card_photo_choice_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора источника фото для карточки."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🤖 AI сгенерирует фото", callback_data="card_photo_ai")],
+            [InlineKeyboardButton(text="📎 Загрузить своё фото", callback_data="card_photo_upload")],
+            [InlineKeyboardButton(text="🚫 Без фото", callback_data="card_photo_none")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_confirmation")]
         ]
     )

@@ -33,6 +33,9 @@ class ContentGeneration(StatesGroup):
 
     # Общие состояния
     waiting_for_confirmation = State()
+    waiting_for_card_photo_choice = State()
+    waiting_for_card_photo_prompt = State()
+    waiting_for_card_user_photo = State()
     waiting_for_refactoring_text = State()
 
     # Генерация изображений
