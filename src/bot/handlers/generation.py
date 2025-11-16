@@ -341,6 +341,7 @@ async def generate_cards_handler(message: Message, state: FSMContext):
             await message.answer(
                 "🖼️ **Вот ваше сгенерированное изображение:**",
                 reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.MARKDOWN,
             )
             await message.answer_photo(
                 photo=BufferedInputFile(generated_image, "ai_generated_image.png"),

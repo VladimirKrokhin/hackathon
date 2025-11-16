@@ -1,8 +1,9 @@
 import logging
+from pathlib import Path
 
 from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
 from aiogram.fsm.context import FSMContext
 
 from bot.states import ContentGeneration, NGOInfo
@@ -58,11 +59,16 @@ async def start_handler(message: Message, state: FSMContext):
             "• /cancel — отменить текущее действие\n\n"
             "Что вы хотите сделать?"
         )
+    BASE_DIR = Path(__file__).resolve().parent
+    image_path = BASE_DIR / 'img' / 'logo.png'
+    # Создайте InputFile из файла
+    photo = FSInputFile(path=image_path)
 
-    await message.answer(
-        welcome_text,
+    await message.answer_photo(
+        photo=photo,
+        caption=welcome_text,
         reply_markup=get_main_menu_keyboard(),
-    )
+        )
 
 
 
@@ -82,10 +88,16 @@ async def main_menu_handler(message: Message, state: FSMContext):
             ngo_name = ngo_data.get("ngo_name", "")
             menu_text = f"👋 Главное меню\n\n🏢 Ваша НКО: {ngo_name}\n\nЧто вы хотите сделать?"
     
-    await message.answer(
-        menu_text,
+    BASE_DIR = Path(__file__).resolve().parent
+    image_path = BASE_DIR / 'img' / 'logo.png'
+    # Создайте InputFile из файла
+    photo = FSInputFile(path=image_path)
+
+    await message.answer_photo(
+        photo=photo,
+        caption=menu_text,
         reply_markup=get_main_menu_keyboard(),
-    )
+        )
 
 
 @start_router.message(Command("cancel"))
