@@ -1,0 +1,378 @@
+/* Inject original CSS from globals.css here */
+
+.a {
+  background-color: #ffffff;
+  aspect-ratio: 0.71;
+  width: 100%;
+  min-width: 1080px;
+  min-height: 1528px;
+  position: relative;
+}
+
+.a .element {
+  position: absolute;
+  top: 1019px;
+  left: 0;
+  width: 1080px;
+  height: 509px;
+  background: linear-gradient(
+    263deg,
+    rgba(18, 214, 223, 1) 0%,
+    rgba(247, 15, 255, 1) 100%
+  );
+}
+
+.a .div {
+  position: absolute;
+  top: 1019px;
+  left: 0;
+  width: 1080px;
+  height: 509px;
+  background: linear-gradient(
+    263deg,
+    rgba(250, 209, 38, 1) 0%,
+    rgba(255, 84, 79, 1) 100%
+  );
+}
+
+.a .element-2 {
+  position: absolute;
+  top: 1019px;
+  left: 0;
+  width: 1080px;
+  height: 509px;
+  background: linear-gradient(
+    263deg,
+    rgba(242, 240, 71, 1) 0%,
+    rgba(30, 217, 79, 1) 100%
+  );
+}
+
+.a .element-3 {
+  position: absolute;
+  top: 1019px;
+  left: 0;
+  width: 1080px;
+  height: 509px;
+  background: linear-gradient(
+    263deg,
+    rgba(200, 227, 250, 1) 0%,
+    rgba(230, 36, 144, 1) 100%
+  );
+}
+
+.a .element-4 {
+  position: absolute;
+  top: 1019px;
+  left: 0;
+  width: 1080px;
+  height: 509px;
+  background: linear-gradient(
+    263deg,
+    rgba(253, 234, 150, 1) 0%,
+    rgba(226, 82, 224, 1) 100%
+  );
+}
+
+.a .rectangle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1080px;
+  height: 1019px;
+  background-color: #00ff42;
+}
+
+.a .group {
+  position: absolute;
+  top: 1058px;
+  left: 54px;
+  width: 972px;
+  height: 370px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.a .div-wrapper {
+  width: 974px;
+  display: flex;
+}
+
+.a .p {
+  width: 972px;
+  height: 216px;
+  color: #ffffff;
+  font-size: 72px;
+  line-height: 72px;
+  font-family: "Rosatom-Regular", Helvetica;
+  font-weight: 400;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.a .text-wrapper {
+  font-family: "Rosatom-Regular", Helvetica;
+  font-weight: 400;
+  color: #ffffff;
+  font-size: 72px;
+  letter-spacing: 0;
+  line-height: 72px;
+}
+
+.a .span {
+  font-family: "Rosatom", Helvetica;
+}
+
+.a .frame {
+  display: flex;
+  width: 925px;
+  height: 140px;
+  position: relative;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.a .frame-wrapper {
+  display: flex;
+  max-width: 972px;
+  height: 60px;
+  align-items: flex-start;
+  gap: 20px;
+  position: relative;
+  width: 100%;
+}
+
+.a .frame-2 {
+  display: inline-flex;
+  height: 60px;
+  align-items: center;
+  gap: 10px;
+  padding: 0px 31px 0px 29px;
+  position: relative;
+  flex: 0 0 auto;
+  background-color: #ffffff;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.a .vector {
+  position: relative;
+  width: 32.4px;
+  height: 32.48px;
+}
+
+.a .text-wrapper-2 {
+  position: relative;
+  width: fit-content;
+  color: #000000;
+  font-size: 36px;
+  line-height: 0.1px;
+  font-family: "Rosatom-Regular", Helvetica;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.a .frame-3 {
+  align-items: flex-start;
+  margin-right: -47.00px;
+  display: inline-flex;
+  gap: 20px;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.a .frame-4 {
+  display: inline-flex;
+  max-width: 972px;
+  height: 60px;
+  align-items: flex-start;
+  gap: 20px;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.a .frame-5 {
+  display: flex;
+  max-width: 972px;
+  padding: 0px 31px 0px 29px;
+  height: 60px;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  background-color: #ffffff;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.a .frame-semey {
+  display: none;
+}
+
+.a .frame-pozhilikh {
+  display: none;
+}
+
+.a .frame-kompaniy {
+  display: inline-flex;
+}
+
+.a .frame-shkolnikov {
+  display: none;
+}
+
+.a .frame-studentov {
+  display: inline-flex;
+}
+
+.a .frame-semey, .frame-pozhilikh, .frame-kompaniy, .frame-shkolnikov, .frame-studentov {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.a .img {
+  position: relative;
+  width: 35.79px;
+  height: 29px;
+}
+
+.a .frame-7 {
+  display: inline-flex;
+  align-items: flex-start;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.a .text-wrapper-3 {
+  position: relative;
+  width: fit-content;
+  font-family: "Rosatom-Regular", Helvetica;
+  font-weight: 400;
+  color: #000000;
+  font-size: 36px;
+  letter-spacing: 0;
+  line-height: 0.1px;
+}
+
+.a .vector-2 {
+  position: relative;
+  width: 35px;
+  height: 36px;
+  aspect-ratio: 0.97;
+}
+
+.a .frame-8 {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.a .vector-3 {
+  position: relative;
+  width: 32.55px;
+  height: 28.97px;
+}
+
+.a .vector-4 {
+  position: relative;
+  width: 28.25px;
+  height: 35.93px;
+}
+
+.a .text-wrapper-4 {
+  position: relative;
+  width: fit-content;
+  margin-top: -1.00px;
+  color: #000000;
+  font-size: 36px;
+  text-align: right;
+  line-height: 0.1px;
+  font-family: "Rosatom-Regular", Helvetica;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.a .vector-5 {
+  position: relative;
+  width: 34px;
+  height: 34px;
+}
+
+.a .text-wrapper-5 {
+  position: absolute;
+  top: 18px;
+  left: 39px;
+  color: #000000;
+  font-size: 36px;
+  line-height: 0.1px;
+  font-family: "Rosatom-Regular", Helvetica;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.a .frame-11 {
+  display: flex;
+  width: 972px;
+  height: 60px;
+  align-items: flex-start;
+  gap: 20px;
+  position: absolute;
+  top: 49px;
+  left: 54px;
+}
+
+.a .frame-12 {
+  flex-direction: column;
+  height: 60px;
+  align-items: flex-end;
+  display: inline-flex;
+  gap: 20px;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.a .frame-13 {
+  display: inline-flex;
+  padding: 0px 31px;
+  height: 60px;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  background-color: #ffffff;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.a .vector-6 {
+  position: relative;
+  width: 30.34px;
+  height: 35.93px;
+  aspect-ratio: 0.84;
+}
+
+.a .text-wrapper-6 {
+  position: relative;
+  width: fit-content;
+  margin-top: -7.00px;
+  margin-bottom: -5.00px;
+  color: #000000;
+  font-size: 36px;
+  line-height: 72px;
+  white-space: nowrap;
+  font-family: "Rosatom-Regular", Helvetica;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.a .vector-7 {
+  position: relative;
+  width: 36px;
+  height: 36.46px;
+}
