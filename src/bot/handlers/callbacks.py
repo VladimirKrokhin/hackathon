@@ -499,3 +499,136 @@ def get_platform_keyboard():
     """Получить клавиатуру выбора платформы."""
     from bot.keyboards.inline import get_platform_keyboard as func
     return func()
+
+
+# === ОБРАБОТЧИКИ ДЛЯ НКО ПРОЦЕССА ===
+@callbacks_router.callback_query(F.data == "ngo_cancel")
+async def ngo_cancel_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик отмены процесса НКО."""
+    await callback.answer()
+    await state.clear()
+    from bot.keyboards.inline import get_ngo_main_keyboard
+
+    await callback.message.answer(
+        "❎ Процесс сбора информации об НКО отменен.",
+        reply_markup=get_ngo_main_keyboard(),
+    )
+
+
+@callbacks_router.callback_query(F.data == "ngo_skip")
+async def ngo_skip_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик пропуска шага в процессе НКО."""
+    await callback.answer()
+
+    current_state = await state.get_state()
+    from bot.states import NGOInfo
+
+    if current_state == NGOInfo.waiting_for_ngo_description:
+        await state.update_data(ngo_description="Не указано")
+        await callback.message.answer(
+            f"✅ Описание: Не указано\n\n"
+            "🎯 Какие формы деятельности ведет ваша НКО? (например: благотворительность, просвещение, помощь животным и т.д.)\n\n"
+            "Можете перечислить через запятую или нажать ⏩ Пропустить.",
+            reply_markup=get_ngo_navigation_keyboard(),
+        )
+        await state.set_state(NGOInfo.waiting_for_ngo_activities)
+
+    elif current_state == NGOInfo.waiting_for_ngo_activities:
+        await state.update_data(ngo_activities="Не указано")
+        await callback.message.answer(
+            f"✅ Формы деятельности: Не указано\n\n"
+            "📞 Укажите контактную информацию для связи (телефон, email, сайт или социальные сети)\n\n"
+            "Можете указать любые удобные способы связи или нажать ⏩ Пропустить.",
+            reply_markup=get_ngo_navigation_keyboard(),
+        )
+        await state.set_state(NGOInfo.waiting_for_ngo_contact)
+
+    elif current_state == NGOInfo.waiting_for_ngo_contact:
+        await state.update_data(ngo_contact="Не указано")
+        # Показываем итоговую информацию для подтверждения
+        data = await state.get_data()
+        name = data.get("ngo_name", "")
+        description = data.get("ngo_description", "Не указано")
+        activities = data.get("ngo_activities", "Не указано")
+        contact_info = "Не указано"
+
+        summary = (
+            f"🏢 **Информация о НКО \"{name}\"**\n\n"
+            f"📝 **Описание:** {description}\n\n"
+            f"🎯 **Деятельность:** {activities}\n\n"
+            f"📞 **Контакты:** {contact_info}\n\n"
+            "Подтверждаете данные? Их можно будет изменить позже."
+        )
+
+        await callback.message.answer(
+            summary,
+            reply_markup=get_ngo_navigation_keyboard(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
+
+
+@callbacks_router.callback_query(F.data == "ngo_done")
+async def ngo_done_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик завершения и подтверждения данных НКО."""
+    await callback.answer()
+
+    current_state = await state.get_state()
+    from bot.states import NGOInfo
+    from bot.keyboards.inline import get_main_menu_keyboard, get_ngo_navigation_keyboard
+
+    if current_state == NGOInfo.waiting_for_ngo_confirmation:
+        # Подтверждение данных НКО
+        data = await state.get_data()
+        ngo_name = data.get("ngo_name", "")
+
+        # Получаем сервис НКО и сохраняем данные в БД
+        from app import dp
+        ngo_service = dp["ngo_service"]
+        user_id = callback.from_user.id
+
+        ngo_data = {
+            "ngo_name": ngo_name,
+            "description": data.get("ngo_description", "Не указано"),
+            "activities": data.get("ngo_activities", "Не указано"),
+            "contact": data.get("ngo_contact", "Не указано"),
+        }
+
+        # Валидируем данные
+        is_valid, validation_message = ngo_service.validate_ngo_data(ngo_data)
+        if not is_valid:
+            await callback.message.answer(
+                f"❌ Ошибка валидации: {validation_message}\n\n"
+                "Попробуйте снова.",
+                reply_markup=get_ngo_navigation_keyboard(),
+            )
+            return
+
+        # Сохраняем в БД
+        success = ngo_service.create_or_update_ngo(user_id, ngo_data)
+
+        if success:
+            await callback.message.answer(
+                f"✅ Информация о НКО \"{ngo_name}\" успешно сохранена в базу данных!\n\n"
+                "Теперь вы можете создавать персонализированный контент.\n\n"
+                "💡 Выберите следующее действие или вернитесь в главное меню:",
+                reply_markup=get_main_menu_keyboard(),
+            )
+            await state.clear()
+        else:
+            await callback.message.answer(
+                "❌ Не удалось сохранить данные. Попробуйте позже.",
+                reply_markup=get_ngo_navigation_keyboard(),
+            )
+
+    else:
+        # Просто завершение текущего процесса
+        await state.clear()
+        from bot.handlers.start import start_handler
+        await start_handler(callback.message, state)
+
+
+def get_ngo_navigation_keyboard():
+    """Получить клавиатуру навигации НКО."""
+    from bot.keyboards.inline import get_ngo_navigation_keyboard as func
+    return func()

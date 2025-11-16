@@ -35,7 +35,6 @@ async def start_handler(message: Message, state: FSMContext):
                 f"📋 Доступные команды:\n"
                 f"• /start — текущее меню\n"
                 f"• /menu — меню действий\n"
-                f"• /ngo — работа с данными НКО\n"
                 f"• /cancel — отменить текущее действие\n\n"
                 f"Что вы хотите сделать?"
             )
@@ -46,7 +45,6 @@ async def start_handler(message: Message, state: FSMContext):
                 "📋 Доступные команды:\n"
                 "• /start — текущее меню\n"
                 "• /menu — меню действий\n"
-                "• /ngo — работа с данными НКО\n"
                 "• /cancel — отменить текущее действие\n\n"
                 "Что вы хотите сделать?"
             )
@@ -57,7 +55,6 @@ async def start_handler(message: Message, state: FSMContext):
             "📋 Доступные команды:\n"
             "• /start — текущее меню\n"
             "• /menu — меню действий\n"
-            "• /ngo — работа с данными НКО\n"
             "• /cancel — отменить текущее действие\n\n"
             "Что вы хотите сделать?"
         )
@@ -67,13 +64,6 @@ async def start_handler(message: Message, state: FSMContext):
         reply_markup=get_main_menu_keyboard(),
     )
 
-
-@start_router.message(Command("ngo"))
-async def ngo_command_handler(message: Message, state: FSMContext):
-    """Обработчик команды /ngo - переход к сценарию сбора информации об НКО."""
-    # Импортируем здесь, чтобы избежать циклических импортов
-    from bot.handlers.ngo_info import ngo_command_handler as ngo_handler
-    await ngo_handler(message, state)
 
 
 @start_router.message(Command("menu"))

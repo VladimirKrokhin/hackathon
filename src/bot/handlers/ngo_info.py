@@ -13,6 +13,7 @@ from app import dp
 from bot.states import NGOInfo, ContentGeneration
 from bot.keyboards.inline import (
     get_goal_keyboard,
+    get_main_menu_keyboard,
     get_ngo_main_keyboard,
     get_ngo_navigation_keyboard,
 )
@@ -21,33 +22,6 @@ ngo_info_router = Router(name="ngo_info")
 logger = logging.getLogger(__name__)
 
 
-@ngo_info_router.message(Command("ngo"))
-async def ngo_command_handler(message: Message, state: FSMContext):
-    """Обработчик команды /ngo - запуск процесса сбора информации об НКО."""
-    # Очищаем состояние для нового процесса
-    await state.clear()
-    
-    # Проверяем наличие данных об НКО в БД
-    ngo_service = dp["ngo_service"]
-    user_id = message.from_user.id
-    
-    if ngo_service.ngo_exists(user_id):
-        # Если у пользователя уже есть данные НКО, показываем главное меню
-        await message.answer(
-            "🏢 У вас уже есть информация о НКО! Выберите действие:",
-            reply_markup=get_ngo_main_keyboard(),
-        )
-        await state.set_state(NGOInfo.waiting_for_ngo_name)
-        return
-    
-    # Если данных НКО нет, начинаем сбор
-    await message.answer(
-        "🏢 Отлично! Давайте заполним информацию о вашей НКО.\n\n"
-        "Это поможет мне создавать персонализированный контент с упоминанием вашей организации.\n\n"
-        "Укажите наименование НКО:",
-        reply_markup=get_ngo_navigation_keyboard(),
-    )
-    await state.set_state(NGOInfo.waiting_for_ngo_name)
 
 
 @ngo_info_router.message(NGOInfo.waiting_for_ngo_name, F.text)
@@ -231,11 +205,10 @@ async def ngo_confirmation_handler(message: Message, state: FSMContext):
             await message.answer(
                 f"✅ Информация о НКО \"{ngo_name}\" успешно сохранена в базу данных!\n\n"
                 "Теперь вы можете создавать персонализированный контент.\n\n"
-                "Какова основная цель вашего поста?",
-                reply_markup=get_goal_keyboard(),
+                "💡 Выберите следующее действие или вернитесь в главное меню:",
+                reply_markup=get_main_menu_keyboard(),
             )
             await state.clear()
-            await state.set_state(ContentGeneration.waiting_for_goal)
         else:
             await message.answer(
                 "❌ Не удалось сохранить данные. Попробуйте позже.",
@@ -256,9 +229,9 @@ async def view_ngo_info_handler(message: Message, state: FSMContext):
     """Обработчик для просмотра текущей информации об НКО."""
     ngo_service = dp["ngo_service"]
     user_id = message.from_user.id
-    
+
     summary = ngo_service.get_ngo_summary(user_id)
-    
+
     if not summary:
         await message.answer(
             "❌ У вас пока нет сохраненной информации об НКО.\n\n"
@@ -266,11 +239,17 @@ async def view_ngo_info_handler(message: Message, state: FSMContext):
             reply_markup=get_ngo_main_keyboard(),
         )
         return
-    
+
     await message.answer(
         summary + "\n\nВыберите действие:",
         reply_markup=get_ngo_main_keyboard(),
         parse_mode=ParseMode.MARKDOWN,
+    )
+
+    # Дополнительное предложение перейти в главное меню
+    await message.answer(
+        "💡 Или вернитесь в главное меню для других действий:",
+        reply_markup=get_main_menu_keyboard(),
     )
 
 
@@ -293,10 +272,16 @@ async def create_content_without_ngo_handler(message: Message, state: FSMContext
     """Обработчик для создания контента без информации об НКО."""
     await state.clear()
     await state.update_data(has_ngo_info=False)
-    
+
     await message.answer(
         "✨ Понятно! Создаем контент без упоминания НКО.\n\n"
         "Какова основная цель вашего поста?",
         reply_markup=get_goal_keyboard(),
     )
     await state.set_state(ContentGeneration.waiting_for_goal)
+
+    # Дополнительное предложение вернуться в главное меню
+    await message.answer(
+        "💡 Или вернитесь в главное меню:",
+        reply_markup=get_main_menu_keyboard(),
+    )

@@ -9,6 +9,6 @@ fallback_router = Router(name="fallback")
 @fallback_router.message()
 async def fallback_handler(message: Message):
     await message.answer(
-        "Я пока не понимаю эту команду. Нажмите /start или выберите цель из меню ниже, чтобы начать заново.",
+        "Я пока не понимаю эту команду. Нажмите или отправьте сообщение /start, чтобы начать взаимодействие с ботом.",
         reply_markup=ReplyKeyboardRemove(),
     )
