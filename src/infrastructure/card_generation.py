@@ -1,6 +1,8 @@
 import logging
 import os
 import aiofiles
+import time
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Tuple
@@ -50,11 +52,13 @@ class PlaywrightCardGenerator(BaseCardGenerator):
         size: Tuple[int, int],
     ) -> bytes:
         """
-        Генерация карточки в изолированном контексте.
+        Генерация карточки в изолированном контексте с использованием HTTP-сервера
+        для корректной загрузки ресурсов (изображений, стилей).
         """
         
         context: BrowserContext | None = None
         page: Page | None = None
+        temp_file_path: Path | None = None
         
         try:
             if not self.browser.is_connected():
@@ -98,14 +102,25 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             template = self.jinja_env.get_template(template_filename)
             html_content = template.render(template_data)
             
-            # Рендерим HTML в Playwright
+            # Создаем временный HTML файл для правильной загрузки ресурсов
+            unique_id = str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
+            temp_filename = f"temp_card_{unique_id}.html"
+            temp_file_path = TEMPLATES_DIR / temp_filename
+            
+            # Записываем HTML в файл
+            async with aiofiles.open(temp_file_path, 'w', encoding='utf-8') as f:
+                await f.write(html_content)
+            
+            logger.info(f"Создан временный файл: {temp_filename}")
+            
+            # Настраиваем размер
             await page.set_viewport_size({"width": width, "height": height})
             
-            # Устанавливаем контент. 
-            await page.set_content(html_content, wait_until="load")
+            # Загружаем HTML через HTTP для корректной загрузки ресурсов
+            await page.goto(f"http://localhost:8000/{temp_filename}", wait_until="load")
             
+            # Ждем загрузки всех ресурсов
             await page.wait_for_load_state("networkidle")
-
             
             # Делаем скриншот
             screenshot_bytes = await page.screenshot(
@@ -126,3 +141,10 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                 await page.close()
             if context:
                 await context.close()
+            # Удаляем временный файл
+            if temp_file_path and temp_file_path.exists():
+                try:
+                    temp_file_path.unlink()
+                    logger.info(f"Удален временный файл: {temp_file_path.name}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {e}")
