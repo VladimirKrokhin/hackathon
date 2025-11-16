@@ -49,5 +49,7 @@ COPY src/ ./src/
 ENV PYTHONPATH=/app/src
 ENV UV_CACHE_DIR=/app/.cache/uv
 
-# Запускаем приложение с активацией виртуального окружения
-CMD ["bash", "-c", "source /app/.venv/bin/activate && uv run src/main.py"]
+WORKDIR /app/src
+
+# Запускаем приложение
+CMD ["bash", "-c", "uv run main.py"]
