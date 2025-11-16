@@ -851,6 +851,7 @@ async def generate_final_image(callback: CallbackQuery, state: FSMContext, width
             photo=image_file,
             caption="✅ **Изображение готово!**\n\nЧто вы хотите сделать дальше?",
             reply_markup=get_image_generation_keyboard(),
+            parse_mode=ParseMode.MARKDOWN,
         )
 
         await state.clear()
