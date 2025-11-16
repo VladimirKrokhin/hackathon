@@ -70,7 +70,7 @@ async def ngo_info_handler(callback: CallbackQuery, state: FSMContext):
     
     menu_text += "Выберите действие:"
     
-    await callback.message.edit_text(
+    await callback.message.answer(
         menu_text,
         reply_markup=get_ngo_info_menu_keyboard(has_ngo_data),
         parse_mode=ParseMode.MARKDOWN,
