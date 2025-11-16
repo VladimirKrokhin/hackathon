@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from bot.handlers.start import start_handler
 from bot.states import ContentGeneration
+from app import dp
 
 callbacks_router = Router(name="callbacks")
 logger = logging.getLogger(__name__)
@@ -18,11 +19,32 @@ async def create_content_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик создания контента - показывает меню создания контента."""
     await callback.answer()
     from bot.keyboards.inline import get_content_creation_menu_keyboard
-    
+
     await callback.message.answer(
         "📝 Создание контента\n\n"
         "Выберите действие:",
         reply_markup=get_content_creation_menu_keyboard()
+    )
+
+
+@callbacks_router.callback_query(F.data == "generate_images")
+async def generate_images_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик генерации изображений."""
+    await callback.answer()
+    await state.clear()
+
+    await callback.message.answer(
+        "🎨 Генерация изображений\n\n"
+        "Я могу помочь вам сгенерировать картинки для ваших постов!\n\n"
+        "**Какое изображение вы хотите сгенерировать?**\n\n"
+        "Опишите тему и стиль изображения, например:\n"
+        "• Портрет волонтера в солнечном парке\n"
+        "• Группа детей за благотворительным мероприятием\n"
+        "• Иконка для сбора средств на помощь животным\n"
+        "• Иллюстрация для поста о защите окружающей среды\n\n"
+        "Или нажмите кнопку ниже для генерации на основе уже созданного контента.",
+        reply_markup=get_image_generation_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
 
@@ -631,4 +653,254 @@ async def ngo_done_handler(callback: CallbackQuery, state: FSMContext):
 def get_ngo_navigation_keyboard():
     """Получить клавиатуру навигации НКО."""
     from bot.keyboards.inline import get_ngo_navigation_keyboard as func
+    return func()
+
+
+# === ОБРАБОТЧИКИ ГЕНЕРАЦИИ ИЗОБРАЖЕНИЙ ===
+@callbacks_router.callback_query(F.data == "back_to_image_menu")
+async def back_to_image_menu_handler(callback: CallbackQuery, state: FSMContext):
+    """Возврат к меню генерации изображений."""
+    await callback.answer()
+    await state.clear()
+
+    await callback.message.answer(
+        "🎨 Генерация изображений\n\n"
+        "Выберите вариант генерации:",
+        reply_markup=get_image_generation_keyboard(),
+    )
+
+
+@callbacks_router.callback_query(F.data == "back_to_style_selection")
+async def back_to_style_selection_handler(callback: CallbackQuery, state: FSMContext):
+    """Возврат к выбору стиля изображения."""
+    await callback.answer()
+
+    await callback.message.answer(
+        "🎭 **Выберите стиль генерации:**",
+        reply_markup=get_image_style_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await state.set_state(ContentGeneration.waiting_for_image_style)
+
+
+@callbacks_router.callback_query(F.data == "describe_image")
+async def describe_image_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик описания изображения."""
+    await callback.answer()
+    await state.clear()
+    await state.set_state(ContentGeneration.waiting_for_image_description)
+
+    await callback.message.answer(
+        "🎨 **Опишите изображение**\n\n"
+        "Расскажите, какое изображение вы хотите получить. Будьте максимально подробны:\n\n"
+        "• Какие объекты/люди должны быть на изображении?\n"
+        "• Какое настроение/атмосфера?\n"
+        "• Цветовая гамма? (яркая, пастельная, монохромная...)\n"
+        "• Стиль изображения? (реалистичный, иллюстрация, минимализм...)\n\n"
+        "_Пример: «Группа улыбающихся детей играет в парке на ярком солнце, теплые цвета, реалистичный стиль»_",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+@callbacks_router.callback_query(F.data == "image_from_content")
+async def image_from_content_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик генерации изображения на основе созданного контента."""
+    await callback.answer()
+
+    # Проверяем наличие сгенерированного контента в состоянии
+    data = await state.get_data()
+    generated_content = data.get("generated_content", "")
+
+    if not generated_content:
+        await callback.message.answer(
+            "❌ **У вас нет текущего сгенерированного контента**\n\n"
+            "Сначала создайте пост, а потом сможете сгенерировать изображение на его основе.",
+            reply_markup=get_image_generation_keyboard(),
+        )
+        return
+
+    await state.update_data(generation_mode="image_from_content")
+    await state.set_state(ContentGeneration.waiting_for_image_style)
+
+    # Показываем превью контента и запрашиваем стиль
+    preview = generated_content[:300] + "..." if len(generated_content) > 300 else generated_content
+
+    await callback.message.answer(
+        "🎭 **Генерация изображения на основе вашего контента**\n\n"
+        "Превью контента:\n"
+        f"```\n{preview}\n```\n\n"
+        "**Выберите стиль генерации:**",
+        reply_markup=get_image_style_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+# === ОБРАБОТЧИКИ ВЫБОРА СТИЛЯ ИЗОБРАЖЕНИЯ ===
+@callbacks_router.callback_query(F.data == "image_style_realistic")
+async def image_style_realistic_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора реалистичного стиля."""
+    await callback.answer()
+    await process_image_generation(callback, state, "реалистичный стиль")
+
+
+@callbacks_router.callback_query(F.data == "image_style_illustration")
+async def image_style_illustration_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора иллюстративного стиля."""
+    await callback.answer()
+    await process_image_generation(callback, state, "иллюстрация в ярком стиле")
+
+
+@callbacks_router.callback_query(F.data == "image_style_minimal")
+async def image_style_minimal_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора минималистичного стиля."""
+    await callback.answer()
+    await process_image_generation(callback, state, "минималистичный стиль")
+
+
+@callbacks_router.callback_query(F.data == "image_style_abstract")
+async def image_style_abstract_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора абстрактного стиля."""
+    await callback.answer()
+    await process_image_generation(callback, state, "абстрактная композиция")
+
+
+async def process_image_generation(callback: CallbackQuery, state: FSMContext, style: str):
+    """Обработка генерации изображения."""
+    data = await state.get_data()
+    generation_mode = data.get("generation_mode", "")
+
+    if generation_mode == "image_from_content":
+        # Генерация на основе контента
+        generated_content = data.get("generated_content", "")
+
+        # Создаем промпт на основе контента
+        prompt = f"На основе этого текста поста: '{generated_content[:200]}...' \n\nСоздай изображение в {style}."
+
+    else:
+        # Используем пользовательский промпт
+        user_description = data.get("image_description", "")
+        prompt = f"{user_description}. Стиль: {style}."
+
+    await state.update_data(selected_style=style, final_prompt=prompt)
+
+    # Запрашиваем размер изображения
+    await callback.message.answer(
+        f"✅ Выбран стиль: **{style}**\n\n"
+        "📐 **Выберите размер изображения:**",
+        reply_markup=get_image_size_inline_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await state.set_state(ContentGeneration.waiting_for_image_size)
+
+
+# === ОБРАБОТЧИКИ ВЫБОРА РАЗМЕРА ИЗОБРАЖЕНИЯ ===
+@callbacks_router.callback_query(F.data == "image_size_1024x1024")
+async def image_size_1024x1024_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора размера 1024x1024."""
+    await callback.answer()
+    await generate_final_image(callback, state, 1024, 1024)
+
+
+@callbacks_router.callback_query(F.data == "image_size_1200x630")
+async def image_size_1200x630_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора размера 1200x630."""
+    await callback.answer()
+    await generate_final_image(callback, state, 1200, 630)
+
+
+@callbacks_router.callback_query(F.data == "image_size_630x1200")
+async def image_size_630x1200_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора размера 630x1200."""
+    await callback.answer()
+    await generate_final_image(callback, state, 630, 1200)
+
+
+async def generate_final_image(callback: CallbackQuery, state: FSMContext, width: int, height: int):
+    """Генерация финального изображения."""
+    data = await state.get_data()
+    prompt = data.get("final_prompt", "")
+
+    await callback.message.answer(
+        f"🎨 **Генерирую изображение...**\n\n"
+        f"📝 Промпт: {prompt[:100]}...\n"
+        f"📐 Размер: {width}x{height}\n\n"
+        "_Это может занять 30-60 секунд..._",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+    try:
+        # Получаем сервис генерации изображений
+        image_service = dp.get("image_generation_service")
+
+        if not image_service:
+            raise Exception("Сервис генерации изображений не настроен")
+
+        # Генерируем изображение
+        image_bytes = await image_service.generate_image(
+            prompt=prompt,
+            width=width,
+            height=height,
+            images=1,
+        )
+
+        # Создаем файл для отправки
+        from aiogram.types.input_file import BufferedInputFile
+        image_file = BufferedInputFile(image_bytes, "generated_image.png")
+
+        await callback.message.answer_photo(
+            photo=image_file,
+            caption="✅ **Изображение готово!**\n\nЧто вы хотите сделать дальше?",
+            reply_markup=get_image_generation_keyboard(),
+        )
+
+        await state.clear()
+
+    except Exception as e:
+        logger.exception("Ошибка при генерации изображения")
+        await callback.message.answer(
+            f"❌ **Ошибка генерации**\n\n"
+            f"Не удалось сгенерировать изображение: {str(e)}\n\n"
+            "Попробуйте еще раз или обратитесь к администратору.",
+            reply_markup=get_image_generation_keyboard(),
+        )
+        await state.clear()
+
+
+# === ОБРАБОТЧИКИ СООБЩЕНИЙ ДЛЯ ОПИСАНИЯ ИЗОБРАЖЕНИЯ ===
+@callbacks_router.message(ContentGeneration.waiting_for_image_description, F.text)
+async def process_image_description(message: Message, state: FSMContext):
+    """Обработка описания изображения."""
+    description = message.text.strip()
+
+    if not description:
+        await message.answer("⚠️ Пожалуйста, опишите изображение.")
+        return
+
+    await state.update_data(image_description=description)
+    await state.set_state(ContentGeneration.waiting_for_image_style)
+
+    await message.answer(
+        f"✅ Описание сохранено: **{description[:100]}...**\n\n"
+        "🎭 **Выберите стиль генерации:**",
+        reply_markup=get_image_style_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+# === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ КЛАВИАТУР ===
+def get_image_style_keyboard():
+    """Получить клавиатуру выбора стиля изображения."""
+    from bot.keyboards.inline import get_image_style_keyboard as func
+    return func()
+
+
+def get_image_size_inline_keyboard():
+    """Получить клавиатуру выбора размера изображения."""
+    from bot.keyboards.inline import get_image_size_inline_keyboard as func
+    return func()
+
+
+def get_image_generation_keyboard():
+    """Получить клавиатуру генерации изображений."""
+    from bot.keyboards.inline import get_image_generation_keyboard as func
     return func()

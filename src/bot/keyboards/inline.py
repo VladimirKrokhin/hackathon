@@ -17,6 +17,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Создание контента", callback_data="create_content")],
+            [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data="generate_images")],
             [InlineKeyboardButton(text="📋 Информация о НКО", callback_data="ngo_info")]
         ]
     )
@@ -275,5 +276,41 @@ def get_ngo_navigation_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="❌ Отмена", callback_data="ngo_cancel")],
             [InlineKeyboardButton(text="⏩ Пропустить", callback_data="ngo_skip")],
             [InlineKeyboardButton(text="✅ Готово", callback_data="ngo_done")]
+        ]
+    )
+
+
+def get_image_generation_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура меню генерации изображений."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✍️ Описать изображение", callback_data="describe_image")],
+            [InlineKeyboardButton(text="🎭 Из созданного контента", callback_data="image_from_content")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+        ]
+    )
+
+
+def get_image_style_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора стиля изображения."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎨 Реалистичный", callback_data="image_style_realistic")],
+            [InlineKeyboardButton(text="🌈 Иллюстрация", callback_data="image_style_illustration")],
+            [InlineKeyboardButton(text="⚪ Минимум", callback_data="image_style_minimal")],
+            [InlineKeyboardButton(text="🔷 Абстрактный", callback_data="image_style_abstract")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_image_menu")]
+        ]
+    )
+
+
+def get_image_size_inline_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора размера изображения."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📱 Квадрат (1024×1024)", callback_data="image_size_1024x1024")],
+            [InlineKeyboardButton(text="📺 Горизонтал (1200×630)", callback_data="image_size_1200x630")],
+            [InlineKeyboardButton(text="📱 Вертикал (630×1200)", callback_data="image_size_630x1200")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_style_selection")]
         ]
     )
