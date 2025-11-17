@@ -10,7 +10,7 @@ from config import config
 from bot.handlers import router
 from infrastructure.prompt_builder import YandexGPTPromptBuilder
 from infrastructure.response_processor import YandexGPTResponseProcessor
-from infrastructure.card_generation import HTTPServerManager, PlaywrightCardGenerator, TEMPLATES_DIR
+from infrastructure.card_generation import HTTPServerManager, PlaywrightCardGenerator, PILCardGenerator, TEMPLATES_DIR
 from services.content_generation import TextContentGenerationService
 from services.card_generation import CardGenerationService
 from infrastructure.gpt import YandexGPT
@@ -123,6 +123,19 @@ async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatc
     logger.info("Сервис иницициализации карточек при помощи Playwright инициализирован.")
     return service
 
+
+async def build_pil_card_generation_service(bot: Bot, dispatcher: Dispatcher) -> CardGenerationService:
+    """Получение сервиса генерации карточек при помощи PIL."""
+
+    logger.info("Инициализирую сервис генерации карточек при помощи PIL...")
+
+    card_generator = PILCardGenerator()
+    service = CardGenerationService(card_generator=card_generator)
+
+    logger.info("Сервис генерации карточек при помощи PIL инициализирован.")
+    return service
+
+
 async def build_fusion_brain_image_generation_service() -> ImageGenerationService:
     # Инициализируем сервис генерации изображений
     logger.info("Инициализирую сервис генерации изображений при помощи Fusion Brain")
@@ -132,7 +145,7 @@ async def build_fusion_brain_image_generation_service() -> ImageGenerationServic
     return image_generation_service
 
 _create_content_generation_service: TextContentGenerationService = build_yandexgpt_content_generation_service
-_create_card_generation_service: CardGenerationService = build_playwright_card_generation_service
+_create_card_generation_service: CardGenerationService = build_pil_card_generation_service
 _create_image_generation_service: ImageGenerationService = build_fusion_brain_image_generation_service
 
 

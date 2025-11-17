@@ -110,6 +110,10 @@ class AbstractPromptBuilder(ABC):
     def build_refactor_text_content_prompt(self, user_data: PromptContext, generated_post: str, user_text: str) -> str:
         pass
 
+    @abstractmethod
+    def build_card_content_prompt(self, user_data: PromptContext, full_content: str) -> str:
+        pass
+
 
 class YandexGPTPromptBuilder(AbstractPromptBuilder):
 
@@ -170,6 +174,46 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         sections.append(
             "Ответь только готовым текстом поста, без дополнительных комментариев и пояснений."
         )
+
+        prompt = "\n".join(sections)
+        return textwrap.dedent(prompt).strip()
+
+    def build_card_content_prompt(self, user_data: PromptContext, full_content: str) -> str:
+        """Генерация промпта для сокращения контента специально для карточки (1-2 предложения)"""
+
+        sections = [
+            "Задача: создай краткий контент для информационной карточки на основе полного поста.",
+        ]
+
+        # Информация о платформе и требованиях
+        platform_requirements = self._get_platform_requirements(user_data.platform)
+        sections.append(f"Платформа для карточки: {user_data.platform} ({platform_requirements})")
+
+        # Требования к контенту карточки
+        sections.extend([
+            "Требования к контенту карточки:",
+            "• Максимум 1-2 кратких предложения (50-120 слов)",
+            "• Должен содержать суть и призыв к действию",
+            "• Лаконичный, но привлекательный текст",
+            "• Без хештегов (они добавятся отдельно)",
+            "• Поддерживай стиль повествования: позитивный, вдохновляющий",
+        ])
+
+        # Добавляем информацию об НКО для контекста
+        if user_data.has_ngo_info and user_data.ngo_name:
+            sections.extend([
+                "\nИнформация о НКО:",
+                f"• Название: {user_data.ngo_name}",
+            ])
+            if user_data.ngo_description and user_data.ngo_description != "Не указано":
+                sections.append(f"• Миссия: {user_data.ngo_description}")
+
+        sections.extend([
+            "\nВот полный текст поста для сокращения:",
+            full_content,
+            "\nСоздай краткую версию этого поста для информационной карточки (1-2 предложения).",
+            "Ответь только сокращенным текстом, без дополнительных комментариев."
+        ])
 
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()

@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from infrastructure.card_generation import BaseCardGenerator
+from infrastructure.card_generation import BaseCardGenerator, PILCardGenerator
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -109,4 +109,3 @@ class CardGenerationService:
 
         logger.info(f"Успешно сгенерировано {len(results)} карточек")
         return results
-

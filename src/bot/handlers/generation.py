@@ -271,14 +271,44 @@ async def generate_cards_handler(message: Message, state: FSMContext):
         else:
             subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
 
-        # Обеспечиваем, что все ключевые значения не пустые
+        # Сохраняем полный пост как fallback
         safe_content = generated_post if generated_post and isinstance(generated_post, str) else "Сгенерированный контент"
-        safe_content = f"{safe_content[:250]}..." if len(safe_content) > 250 else safe_content
+
+        # Вместо простого обрезания используем GPT для сокращения контента специально для карточки
+        await message.answer(
+            "🤖 Создаю краткий контент для карточки...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        try:
+            # Генерируем сокращенный контент специально для карточки
+            card_text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
+            card_content = await card_text_generation_service.generate_card_content(data, generated_post)
+
+            # Используем сгенерированный сокращенный контент, если он получился короче 300 символов
+            # Иначе используем обрезанный полный пост как fallback
+            if card_content and len(card_content.strip()) > 10 and len(card_content.strip()) < 300:
+                card_content_for_template = card_content.strip()
+                logger.info(f"Используем сокращенный контент для карточки: {len(card_content)} символов")
+            else:
+                # Fallback - обрезаем текст если GPT дал слишком длинный результат
+                card_content_for_template = f"{safe_content[:300]}..." if len(safe_content) > 300 else safe_content
+                logger.warning(f"GPT дал неподходящий контент ({len(card_content) if card_content else 0} символов), используем fallback")
+
+            await message.answer(
+                "✅ Краткий контент для карточки готов!",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+
+        except Exception as e:
+            logger.exception("Ошибка генерации сокращенного контента для карточки, используем fallback")
+            # Fallback в случае ошибки
+            card_content_for_template = f"{safe_content[:300]}..." if len(safe_content) > 300 else safe_content
 
         template_data = {
             "title": get_title_by_goal(goal or "🎯 Рассказать о мероприятии") or "Основная информация",
             "subtitle": subtitle or "",
-            "content": safe_content,
+            "content": card_content_for_template,
             "org_name": ngo_name or "Ваша НКО",
             "contact_info": ngo_contact or "",
             "primary_color": get_color_by_goal(goal or "🎯 Рассказать о мероприятии") or "#667eea",
@@ -310,39 +340,15 @@ async def generate_cards_handler(message: Message, state: FSMContext):
                 "narrative_style": data.get('narrative_style', ''),
             })
 
-        # Добавляем изображение в данные шаблона если есть (карточка имеет приоритет над общим изображением)
+        # Добавляем изображение для фона карточки
+        # PILCardGenerator в первую очередь проверяет background_image_bytes
         card_image_to_use = card_generated_image if card_generated_image else generated_image
         if card_image_to_use:
-            # Сохраняем изображение как временный файл для обслуживания через HTTP-сервер
-            import hashlib
-            import time
-            import os
-            from pathlib import Path
-
-            # Создаем имя файла на основе хэша данных для уникальности
-            image_hash = hashlib.md5(card_image_to_use).hexdigest()[:8]
-            timestamp = str(int(time.time()))
-            temp_image_filename = f"bg_{timestamp}_{image_hash}.png"
-
-            # Путь к сохранению изображения (в каталоге templates)
-            templates_dir = Path("src/templates")  # Используем тот же путь, что и в card_generation.py
-            temp_image_path = templates_dir / temp_image_filename
-
-            try:
-                # Сохраняем изображение как файл
-                with open(temp_image_path, 'wb') as f:
-                    f.write(card_image_to_use)
-
-                # Добавляем URL для доступа через HTTP-сервер
-                template_data["background_image_url"] = f"http://localhost:8000/{temp_image_filename}"
-                template_data["background_image_path"] = str(temp_image_path)  # Для очистки
-
-                logger.info(f"Background image saved as temporary file: {temp_image_filename} ({len(card_image_to_use)} bytes)")
-            except Exception as e:
-                logger.error(f"Failed to save background image file: {e}")
-                logger.info("No background image added to template data")
+            # Передаем изображение напрямую как bytes для PILCardGenerator
+            template_data["background_image_bytes"] = card_image_to_use
+            logger.info(f"Фоновое изображение добавлено как bytes: {len(card_image_to_use)} байт")
         else:
-            logger.info("No background image added to template data")
+            logger.info("Фоновое изображение не добавлено")
 
         # Логируем полные данные шаблона для отладки
         logger.info(f"Full template_data: {template_data}")

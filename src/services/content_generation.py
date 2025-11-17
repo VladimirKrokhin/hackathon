@@ -128,3 +128,23 @@ class TextContentGenerationService:
 
         logger.info(f"Успешно сгенерирован исправленный вариант длиной {len(generated_text)} символов")
         return generated_text
+
+    async def generate_card_content(
+        self, user_data: Union[Dict, PromptContext], full_content: str
+    ) -> str:
+        """Генерация сокращенного контента специально для карточки (1-2 предложения)."""
+        context = (
+            user_data
+            if isinstance(user_data, PromptContext)
+            else PromptContext.from_dict(user_data or {})
+        )
+        logger.info(f"Генерация контента для карточки на основе текста длиной {len(full_content)} символов")
+
+        prompt = self.prompt_builder.build_card_content_prompt(context, full_content)
+        logger.info(f"Сформирован промпт для карточки длиной {len(prompt)} символов")
+
+        raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
+        card_text = self.response_processor.process_response(raw_response)
+
+        logger.info(f"Успешно сгенерирован контент для карточки длиной {len(card_text)} символов")
+        return card_text
