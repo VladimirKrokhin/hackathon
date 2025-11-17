@@ -1,5 +1,10 @@
 import logging
-import os
+import asyncio
+import aiohttp
+from aiohttp import web
+import threading
+import socket
+from pathlib import Path
 import aiofiles
 import time
 import uuid
@@ -184,3 +189,117 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                         logger.info(f"Удалено временное фоновое изображение: {bg_image_path.name}")
                 except Exception as e:
                     logger.warning(f"Не удалось удалить временное фоновое изображение {data.get('background_image_path')}: {e}")
+
+
+class HTTPServerManager:
+    """Менеджер HTTP-сервера для обслуживания шаблонов Playwright."""
+
+    def __init__(self, templates_dir: Path, port: int = 8000):
+        self.templates_dir = templates_dir
+        self.port = port
+        self.server_thread = None
+        self.server = None
+        self.loop = None
+
+    def _check_port_available(self) -> bool:
+        """Проверка доступности порта."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind(('127.0.0.1', self.port))
+                sock.close()
+                return True
+        except OSError:
+            return False
+
+    async def _start_http_server_async(self):
+        """Запуск HTTP-сервера в асинхронном режиме."""
+
+        async def handle_request(request):
+            """Обработчик запросов."""
+            file_path = self.templates_dir / request.match_info['filename']
+
+            # Проверка безопасности - файл должен быть в templates_dir
+            if not str(file_path).startswith(str(self.templates_dir)):
+                return web.Response(status=403, text="Access denied")
+
+            if not file_path.exists():
+                return web.Response(status=404, text="File not found")
+
+            try:
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+
+                # Определение MIME-типа и charset
+                if file_path.suffix.lower() == '.html':
+                    content_type = 'text/html'
+                    charset = 'utf-8'
+                elif file_path.suffix.lower() == '.css':
+                    content_type = 'text/css'
+                    charset = 'utf-8'
+                elif file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif']:
+                    content_type = 'image/' + file_path.suffix[1:].lower()
+                    charset = None
+                elif file_path.suffix.lower() == '.svg':
+                    content_type = 'image/svg+xml'
+                    charset = None
+                else:
+                    content_type = 'application/octet-stream'
+                    charset = None
+
+                if charset:
+                    return web.Response(body=content, content_type=content_type, charset=charset)
+                else:
+                    return web.Response(body=content, content_type=content_type)
+
+            except Exception as e:
+                logger.error(f"Error serving {file_path}: {e}")
+                return web.Response(status=500, text="Internal server error")
+
+        app = web.Application()
+        app.router.add_get('/{filename:.*}', handle_request)
+
+        runner = web.AppRunner(app)
+        await runner.setup()
+
+        site = web.TCPSite(runner, '127.0.0.1', self.port)
+        await site.start()
+
+        logger.info(f"HTTP-сервер запущен на http://127.0.0.1:{self.port} для директории {self.templates_dir}")
+
+        # Сохраняем ссылки для остановки
+        self.server = runner
+        self.site = site
+
+        # Бесконечный цикл поддержания сервера
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            await runner.cleanup()
+            logger.info("HTTP-сервер остановлен")
+
+    def start_in_thread(self):
+        """Запуск HTTP-сервера в отдельном потоке."""
+        if not self._check_port_available():
+            logger.warning(f"Порт {self.port} уже занят. HTTP-сервер не запущен.")
+            return False
+
+        def run_server():
+            """Функция для запуска сервера в потоке."""
+            try:
+                asyncio.run(self._start_http_server_async())
+            except Exception as e:
+                logger.error(f"Ошибка запуска HTTP-сервера: {e}")
+
+        self.server_thread = threading.Thread(target=run_server, daemon=True)
+        self.server_thread.start()
+        logger.info(f"HTTP-сервер поток запущен на порту {self.port}")
+        return True
+
+    async def stop(self):
+        """Остановка HTTP-сервера."""
+        if self.server:
+            await self.server.cleanup()
+            logger.info("HTTP-сервер остановлен")
+
+
