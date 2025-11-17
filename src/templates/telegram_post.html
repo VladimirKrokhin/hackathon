@@ -21,7 +21,11 @@
         <div class="div-wrapper">
           <h1 class="p">
             <span class="span">
-              {{ title | default('ОТКРЫВАЕМ <span style="font-weight: bold;">ПУНКТЫ ОБОГРЕВА</span> ОТКРЫВАЕМ ПУНКТЫ ОБОГРЕВА') }}
+              {% if title %}
+                {{ title | safe }}
+              {% else %}
+                ОТКРЫВАЕМ <span style="font-weight: bold;">ПУНКТЫ ОБОГРЕВА</span>
+              {% endif %}
             </span>
           </h1>
         </div>
@@ -29,48 +33,104 @@
           <div class="frame-wrapper">
             <div class="frame-2">
               <img class="vector" src="img/adress.svg" alt="" role="presentation" />
-              <p class="text-wrapper-2">{{ adress | default('г.Москва, улица Пушкина, дом 55') }}</p>
+              <p class="text-wrapper-2">{{ address | default('г.Москва, улица Пушкина, дом 55') }}</p>
             </div>
           </div>
           <div class="frame-3">
             <div class="frame-4">
               <div class="frame-5">
                 <span class="text-wrapper-2">Для</span>
-                <div class="frame-semey">
-                  <img class="img" src="img/semey.svg" alt="" role="presentation" />
-                  <div class="frame-7">
-                    <span class="text-wrapper-3">Cемей</span>
-                    <span class="text-wrapper-3">,</span>
+                
+                <!-- Динамическое отображение целевой аудитории -->
+                {% if target_audience %}
+                  {% if 'семья' in target_audience.lower() %}
+                  <div class="frame-semey">
+                    <img class="img" src="img/semey.svg" alt="" role="presentation" />
+                    <div class="frame-7">
+                      <span class="text-wrapper-3">Семей</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
                   </div>
-                </div>
-                <div class="frame-pozhilikh">
-                  <img class="vector-2" src="img/pozhilikh.svg" alt="" role="presentation" />
-                  <div class="frame-8">
-                    <span class="text-wrapper-3">Пожилых</span>
-                    <span class="text-wrapper-3">,</span>
+                  {% endif %}
+                  
+                  {% if 'пожилой' in target_audience.lower() or 'пенсионер' in target_audience.lower() %}
+                  <div class="frame-pozhilikh">
+                    <img class="vector-2" src="img/pozhilikh.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Пожилых</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
                   </div>
-                </div>
-                <div class="frame-kompaniy">
-                  <img class="vector-3" src="img/kompaniy.svg" alt="" role="presentation" />
-                  <div class="frame-8">
-                    <span class="text-wrapper-3">Компаний</span>
-                    <span class="text-wrapper-3">,</span>
+                  {% endif %}
+                  
+                  {% if 'компания' in target_audience.lower() or 'бизнес' in target_audience.lower() %}
+                  <div class="frame-kompaniy">
+                    <img class="vector-3" src="img/kompaniy.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Компаний</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
                   </div>
-                </div>
-                <div class="frame-shkolnikov">
-                  <img class="vector-4" src="img/shkolnikov.svg" alt="" role="presentation" />
-                  <div class="frame-8">
-                    <span class="text-wrapper-3">Школьников</span>
-                    <span class="text-wrapper-3">,</span>
+                  {% endif %}
+                  
+                  {% if 'школьник' in target_audience.lower() or 'ребенок' in target_audience.lower() %}
+                  <div class="frame-shkolnikov">
+                    <img class="vector-4" src="img/shkolnikov.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Школьников</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
                   </div>
-                </div>
-                <div class="frame-studentov">
-                  <img class="vector-5" src="img/studentov.svg" alt="" role="presentation" />
-                  <div class="frame-8">
-                    <span class="text-wrapper-3">Студентов</span>
-                    <span class="text-wrapper-3" style="display: none">,</span>
+                  {% endif %}
+                  
+                  {% if 'студент' in target_audience.lower() or 'молодежь' in target_audience.lower() %}
+                  <div class="frame-studentov">
+                    <img class="vector-5" src="img/studentov.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Студентов</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
                   </div>
-                </div>
+                  {% endif %}
+                {% else %}
+                  <!-- По умолчанию показываем все иконки -->
+                  <div class="frame-semey">
+                    <img class="img" src="img/semey.svg" alt="" role="presentation" />
+                    <div class="frame-7">
+                      <span class="text-wrapper-3">Cемей</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
+                  </div>
+                  <div class="frame-pozhilikh">
+                    <img class="vector-2" src="img/pozhilikh.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Пожилых</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
+                  </div>
+                  <div class="frame-kompaniy">
+                    <img class="vector-3" src="img/kompaniy.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Компаний</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
+                  </div>
+                  <div class="frame-shkolnikov">
+                    <img class="vector-4" src="img/shkolnikov.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Школьников</span>
+                      <span class="text-wrapper-3">,</span>
+                    </div>
+                  </div>
+                  <div class="frame-studentov">
+                    <img class="vector-5" src="img/studentov.svg" alt="" role="presentation" />
+                    <div class="frame-8">
+                      <span class="text-wrapper-3">Студентов</span>
+                      <span class="text-wrapper-3" style="display: none">,</span>
+                    </div>
+                  </div>
+                {% endif %}
+                
               </div>
             </div>
           </div>
@@ -80,14 +140,12 @@
         <div class="frame-12">
           <div class="frame-13">
             <img class="vector-6" src="img/building.svg" alt="" role="presentation" />
-<!--            <span class="text-wrapper-6">НКО «Райан Гослинг»</span>-->
             <span class="text-wrapper-6">{{ org_name | default('НКО «Райан Гослинг»') }}</span>
           </div>
         </div>
         <div class="frame-2">
           <img class="vector-7" src="img/datetime.svg" alt="" role="presentation" />
-<!--          <time class="text-wrapper-2" datetime="2024-11-16T18:00">16 ноября | 18:00</time>-->
-              <time class="text-wrapper-2">{{ date_time | default('16 ноября | 18:00') }}</time>
+          <time class="text-wrapper-2">{{ date_time | default('16 ноября | 18:00') }}</time>
         </div>
       </header>
     </main>

@@ -313,10 +313,34 @@ async def generate_cards_handler(message: Message, state: FSMContext):
         # Добавляем изображение в данные шаблона если есть (карточка имеет приоритет над общим изображением)
         card_image_to_use = card_generated_image if card_generated_image else generated_image
         if card_image_to_use:
-            import base64
-            image_base64 = base64.b64encode(card_image_to_use).decode('utf-8')
-            template_data["background_image"] = f"data:image/png;base64,{image_base64}"
-            logger.info(f"Background image added to template data: {len(image_base64)} chars")
+            # Сохраняем изображение как временный файл для обслуживания через HTTP-сервер
+            import hashlib
+            import time
+            import os
+            from pathlib import Path
+
+            # Создаем имя файла на основе хэша данных для уникальности
+            image_hash = hashlib.md5(card_image_to_use).hexdigest()[:8]
+            timestamp = str(int(time.time()))
+            temp_image_filename = f"bg_{timestamp}_{image_hash}.png"
+
+            # Путь к сохранению изображения (в каталоге templates)
+            templates_dir = Path("src/templates")  # Используем тот же путь, что и в card_generation.py
+            temp_image_path = templates_dir / temp_image_filename
+
+            try:
+                # Сохраняем изображение как файл
+                with open(temp_image_path, 'wb') as f:
+                    f.write(card_image_to_use)
+
+                # Добавляем URL для доступа через HTTP-сервер
+                template_data["background_image_url"] = f"http://localhost:8000/{temp_image_filename}"
+                template_data["background_image_path"] = str(temp_image_path)  # Для очистки
+
+                logger.info(f"Background image saved as temporary file: {temp_image_filename} ({len(card_image_to_use)} bytes)")
+            except Exception as e:
+                logger.error(f"Failed to save background image file: {e}")
+                logger.info("No background image added to template data")
         else:
             logger.info("No background image added to template data")
 

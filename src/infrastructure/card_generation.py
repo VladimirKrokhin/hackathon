@@ -11,7 +11,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from config import config
 from app import dp
 
-TEMPLATES_DIR = Path("templates")
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             await page.set_viewport_size({"width": width, "height": height})
             
             # Загружаем HTML через HTTP для корректной загрузки ресурсов
-            await page.goto(f"http://localhost:8000/{temp_filename}", wait_until="load")
+            await page.goto(f"http://localhost:8000/{temp_filename}", wait_until="networkidle")
             
             # Ждем загрузки всех ресурсов
             await page.wait_for_load_state("networkidle")
@@ -174,3 +174,13 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                     logger.info(f"Удален временный файл: {temp_file_path.name}")
                 except Exception as e:
                     logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {e}")
+
+            # Удаляем временное фоновое изображение если оно было указано
+            if data.get("background_image_path"):
+                try:
+                    bg_image_path = Path(data["background_image_path"])
+                    if bg_image_path.exists():
+                        bg_image_path.unlink()
+                        logger.info(f"Удалено временное фоновое изображение: {bg_image_path.name}")
+                except Exception as e:
+                    logger.warning(f"Не удалось удалить временное фоновое изображение {data.get('background_image_path')}: {e}")
