@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 async def build_yandexgpt_content_generation_service() -> TextContentGenerationService:
+    logger.info("Инициализирую сервис генерации текста при помощи Yandex GPT...")
     response_processor = YandexGPTResponseProcessor()
     gpt_client = YandexGPT()
     prompt_builder = YandexGPTPromptBuilder()
@@ -38,12 +39,17 @@ async def build_yandexgpt_content_generation_service() -> TextContentGenerationS
         response_processor=response_processor,
     )
 
+    logger.info("Сервис генерации текста при помощи Yandex GPT инициализирован")
+
+
     return service
 
 
 
 async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatcher) -> CardGenerationService:
     """Получение сервиса генерации карточек."""
+
+    logger.info("Инициализирую сервис генерации карточек при помощи Playwright...")
 
     async def start_http_server(dispatcher: Dispatcher):
         http_server_manager = HTTPServerManager(TEMPLATES_DIR, port=8000)
@@ -113,29 +119,30 @@ async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatc
 
     card_generator = PlaywrightCardGenerator(browser=browser)
     service = CardGenerationService(card_generator=card_generator)
+
+    logger.info("Сервис иницициализации карточек при помощи Playwright инициализирован.")
     return service
 
-
+async def build_fusion_brain_image_generation_service() -> ImageGenerationService:
+    # Инициализируем сервис генерации изображений
+    logger.info("Инициализирую сервис генерации изображений при помощи Fusion Brain")
+    image_generator = create_fusion_brain_image_generator()
+    image_generation_service = ImageGenerationService(image_generator=image_generator)
+    logger.info("Сервис генерации изображений Fusion Brain успешно инициализирован")
+    return image_generation_service
 
 _create_content_generation_service: TextContentGenerationService = build_yandexgpt_content_generation_service
 _create_card_generation_service: CardGenerationService = build_playwright_card_generation_service
+_create_image_generation_service: ImageGenerationService = build_fusion_brain_image_generation_service
 
 
 async def build_services(bot: Bot, dispatcher: Dispatcher):
+    logger.info("Собираю сервисы...")
     dp = dispatcher
 
     dp["text_content_generation_service"]: TextContentGenerationService = await _create_content_generation_service()
     dp["card_generation_service"]: CardGenerationService = await _create_card_generation_service(bot, dp) 
-    
-    # Инициализируем сервис генерации изображений
-    try:
-        image_generator = create_fusion_brain_image_generator()
-        image_generation_service = ImageGenerationService(image_generator=image_generator)
-        dp["image_generation_service"] = image_generation_service
-        logger.info("Сервис генерации изображений успешно инициализирован")
-    except Exception as e:
-        logger.warning(f"Не удалось инициализировать сервис генерации изображений: {e}")
-        dp["image_generation_service"] = None
+    dp["image_generation_service"]: ImageGenerationService = await _create_image_generation_service()
     
     # Инициализируем сервис НКО
     init_database()  # Инициализируем базу данных
@@ -149,6 +156,8 @@ async def build_services(bot: Bot, dispatcher: Dispatcher):
     dp["get_ngo_service"] = get_ngo_service
     # Для обратной совместимости создаем один экземпляр
     dp["ngo_service"] = get_ngo_service()
+
+    logger.info("Сервисы собраны.")
 
 
 
