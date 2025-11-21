@@ -113,18 +113,31 @@ async def yes_fill_ngo_handler(callback: CallbackQuery, state: FSMContext):
 @callbacks_router.callback_query(F.data == "no_fill_ngo")
 async def no_fill_ngo_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик отказа заполнить данные НКО."""
+    # await callback.answer()
+    # from bot.keyboards.inline import get_goal_keyboard
+    #
+    # await state.clear()
+    # await state.update_data(has_ngo_info=False)
+    #
+    # await callback.message.answer(
+    #     "✨ Понятно! Создаем контент без упоминания НКО.\n\n"
+    #     "Какова основная цель вашего поста?",
+    #     reply_markup=get_goal_keyboard()
+    # )
+    # await state.set_state(ContentGeneration.waiting_for_goal)
+
     await callback.answer()
-    from bot.keyboards.inline import get_goal_keyboard
-    
-    await state.clear()
-    await state.update_data(has_ngo_info=False)
-    
+    data = await state.get_data()
+    generation_mode = data.get("generation_mode", "")
     await callback.message.answer(
         "✨ Понятно! Создаем контент без упоминания НКО.\n\n"
-        "Какова основная цель вашего поста?",
-        reply_markup=get_goal_keyboard()
     )
-    await state.set_state(ContentGeneration.waiting_for_goal)
+    if generation_mode == "structured":
+        # Переход к структурированной форме без НКО
+        await structured_generation_handler(callback.message, state)
+    elif generation_mode == "free_form":
+        # Переход к свободной форме без НКО
+        await free_form_generation_handler(callback.message, state)
 
 
 @callbacks_router.callback_query(F.data == "structured_content")
