@@ -1,0 +1,133 @@
+name: Управление ботом
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Выберите действие для управления ботом'
+        required: true
+        default: 'restart'
+        type: choice
+        options:
+        - restart
+        - start
+        - stop
+
+jobs:
+  control:
+    runs-on: self-hosted
+
+    steps:
+    - name: Выполняем выбранное действие
+      run: |
+        ACTION="${{ inputs.action }}"
+
+        case $ACTION in
+          "start")
+            echo "🚀 Запускаем бота..."
+            cd workspace/hackathon
+
+            echo "Проверяем текущий статус..."
+            docker-compose ps
+
+            echo "Запускаем контейнеры..."
+            docker-compose up -d
+
+            echo "⏳ Проверяем готовность бота..."
+            sleep 3
+
+            # Ждем максимум 30 секунд
+            MAX_ATTEMPTS=10
+
+            for i in $(seq 1 $MAX_ATTEMPTS); do
+              if docker-compose ps | grep -q "Up"; then
+                echo "✅ Контейнер работает (попытка $i/$MAX_ATTEMPTS)"
+
+                # Дополнительная проверка Python процесса
+                if docker-compose exec -T publichun-bot pgrep -f "python.*main.py" > /dev/null 2>&1; then
+                  echo "✅ Бот полностью готов!"
+                  break
+                fi
+              fi
+
+              if [ $i -eq $MAX_ATTEMPTS ]; then
+                echo "❌ Бот не запустился за отведенное время"
+                docker-compose logs publichun-bot || true
+                exit 1
+              fi
+
+              echo "⏳ Ждем еще 3 секунды..."
+              sleep 3
+            done
+
+            echo "📊 Финальный статус:"
+            docker-compose ps
+            ;;
+          "stop")
+            echo "🛑 Останавливаем бота..."
+            cd workspace/hackathon
+
+            echo "Текущий статус:"
+            docker-compose ps
+
+            echo "Останавливаем контейнеры..."
+            docker-compose down
+
+            echo "✅ Бот успешно остановлен!"
+            ;;
+          "restart")
+            echo "🔄 Перезапускаем бота..."
+            cd workspace/hackathon
+
+            echo "Текущий статус:"
+            docker-compose ps
+
+            echo "Останавливаем старые контейнеры..."
+            docker-compose down
+
+            echo "⏳ Небольшая пауза..."
+            sleep 3
+
+            echo "Собираем обновленные образы..."
+            docker-compose build --parallel
+
+            echo "Запускаем новые контейнеры..."
+            docker-compose up -d
+
+            echo "⏳ Проверяем готовность бота после перезапуска..."
+            sleep 3
+
+            # Ждем максимум 45 секунд
+            MAX_ATTEMPTS=15
+
+            for i in $(seq 1 $MAX_ATTEMPTS); do
+              if docker-compose ps | grep -q "Up"; then
+                echo "✅ Контейнер работает (попытка $i/$MAX_ATTEMPTS)"
+
+                # Проверяем что Python процесс работает
+                if docker-compose exec -T publichun-bot pgrep -f "python.*main.py" > /dev/null 2>&1; then
+                  echo "✅ Бот полностью готов после перезапуска!"
+                  break
+                fi
+              fi
+
+              if [ $i -eq $MAX_ATTEMPTS ]; then
+                echo "❌ Бот не запустился после перезапуска"
+                echo "📝 Логи последнего запуска:"
+                docker-compose logs --tail=20 publichun-bot || true
+                exit 1
+              fi
+
+              echo "⏳ Ждем еще 3 секунды..."
+              sleep 3
+            done
+
+            echo "📊 Финальный статус:"
+            docker-compose ps
+            ;;
+          *)
+            echo "❌ Неизвестное действие: $ACTION"
+            echo "Допустимые действия: start, stop, restart"
+            exit 1
+            ;;
+        esac
