@@ -92,15 +92,11 @@ async def create_content_form_handler(callback: CallbackQuery, state: FSMContext
 
 @callbacks_router.callback_query(F.data == "back_to_content_menu")
 async def back_to_content_menu_handler(callback: CallbackQuery, state: FSMContext):
-    """Возврат к меню создания контента."""
+    """Возврат непосредственно в главное меню (минуя промежуточный шаг)."""
     await callback.answer()
-    from bot.keyboards.inline import get_content_creation_menu_keyboard
-    
-    await callback.message.answer(
-        "📝 Создание контента\n\n"
-        "Выберите действие:",
-        reply_markup=get_content_creation_menu_keyboard()
-    )
+    await state.clear()
+    from bot.handlers.start import start_handler
+    await start_handler(callback.message, state)
 
 
 @callbacks_router.callback_query(F.data == "yes_fill_ngo")
