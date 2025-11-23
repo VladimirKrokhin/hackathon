@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from bot.handlers.start import start_handler
 from bot.states import ContentGeneration, ContentPlan
-from app import dp
+from app import bot, dp
 
 callbacks_router = Router(name="callbacks")
 logger = logging.getLogger(__name__)
@@ -496,11 +496,11 @@ async def platform_telegram_handler(callback: CallbackQuery, state: FSMContext):
     await platform_handler_common(callback, state, "💬 Telegram (для взрослых/бизнеса)")
 
 
-@callbacks_router.callback_query(F.data == "platform_instagram")
-async def platform_instagram_handler(callback: CallbackQuery, state: FSMContext):
-    """Обработчик выбора Instagram."""
+@callbacks_router.callback_query(F.data == "platform_website")
+async def platform_website_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик выбора Сайта."""
     await callback.answer()
-    await platform_handler_common(callback, state, "📸 Instagram (визуальный контент)")
+    await platform_handler_common(callback, state, "🌐 Сайт (для информационных материалов)")
 
 
 async def platform_handler_common(callback: CallbackQuery, state: FSMContext, platform_name: str):
@@ -1466,8 +1466,6 @@ async def handle_card_user_photo(message: Message, state: FSMContext):
     photo = message.photo[-1]
 
     # Скачиваем изображение
-    from app import dp
-    bot = dp["bot"]
 
     try:
         image_file = await bot.download(photo.file_id, destination=None)

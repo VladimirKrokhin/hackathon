@@ -12,6 +12,7 @@ from bot.keyboards.inline import (
     get_yes_no_keyboard,
     get_image_source_keyboard,
 )
+from app import bot
 
 logger = logging.getLogger(__name__)
 
@@ -335,8 +336,6 @@ async def user_image_handler(message: Message, state: FSMContext):
     photo = message.photo[-1]
 
     # Скачиваем изображение
-    from app import dp
-    bot = dp["bot"]
 
     try:
         image_file = await bot.download(photo.file_id, destination=None)
