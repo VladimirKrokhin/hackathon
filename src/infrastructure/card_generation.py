@@ -354,6 +354,139 @@ class PILCardGenerator(BaseCardGenerator):
 
         return '\n'.join(lines)
 
+    def _safe_wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
+        """Безопасный перенос текста с гарантией, что ни одна строка не выйдет за max_width.
+
+        Возвращает список строк, каждая из которых гарантированно помещается по ширине.
+        """
+        if not text:
+            return []
+
+        # Сначала используем textwrap для базового переноса
+        import textwrap
+
+        # Приблизительный расчет ширины символа для textwrap (усредненный)
+        avg_char_width = font.getbbox("W")[2] - font.getbbox("W")[0] + 2
+        max_chars = max(1, int(max_width / avg_char_width))
+
+        wrapped_lines = textwrap.wrap(text, width=max_chars)
+        if not wrapped_lines:
+            return []
+
+        safe_lines = []
+
+        for line in wrapped_lines:
+            # Последняя проверка ширины каждой строки
+            bbox = font.getbbox(line)
+            line_width = bbox[2] - bbox[0]
+
+            if line_width <= max_width:
+                safe_lines.append(line)
+            else:
+                # Если строка все равно слишком широкая, режем ее посимвольно
+                current_line = ""
+                for char in line:
+                    test_line = current_line + char
+                    bbox = font.getbbox(test_line)
+                    if bbox[2] - bbox[0] <= max_width - 4:  # -4 для запаса
+                        current_line = test_line
+                    else:
+                        if current_line:
+                            safe_lines.append(current_line)
+                        current_line = char
+
+                if current_line:
+                    safe_lines.append(current_line)
+
+        return safe_lines
+
+    def _format_markdown_text_telegram(self, text: str, base_font: ImageFont.FreeTypeFont, max_width: int) -> List[Tuple[str, bool, bool]]:
+        """Парсинг простого Markdown текста для Telegram-карточек.
+
+        Поддерживает:
+        - **bold** текст
+        - *italic* текст (placeholder для будущего расширения)
+
+        Возвращает список кортежей: (text_chunk, is_bold, is_italic)
+        """
+        if not text:
+            return []
+
+        # Удаляем старые маркеры форматирования рекурсивно
+        text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\*\*\1\*', text)  # ***text*** -> **text*
+        text = re.sub(r'___(.+?)___', r'\*\*\1\*', text)        # ___text___ -> **text*
+
+        # Разбиваем на токены по правилам markdown
+        tokens = []
+        i = 0
+        while i < len(text):
+            if text[i:i+2] == '**':
+                # Найдем конец bold текста
+                end = text.find('**', i+2)
+                if end != -1:
+                    bold_text = text[i+2:end]
+                    if bold_text:
+                        tokens.append((bold_text, True, False))  # bold
+                    i = end + 2
+                else:
+                    # Не найден закрывающий маркер, добавляем как обычный текст
+                    tokens.append((text[i], False, False))
+                    i += 1
+            elif text[i] == '*':
+                # Найдем конец italic текста
+                end = text.find('*', i+1)
+                if end != -1:
+                    italic_text = text[i+1:end]
+                    if italic_text:
+                        tokens.append((italic_text, False, True))  # italic (пока без курсива)
+                    i = end + 1
+                else:
+                    # Не найден закрывающий маркер, добавляем как обычный текст
+                    tokens.append((text[i], False, False))
+                    i += 1
+            else:
+                # Обычный текст - собираем до следующего маркера
+                chunk = ""
+                while i < len(text) and text[i:i+2] != '**' and text[i] != '*':
+                    chunk += text[i]
+                    i += 1
+                if chunk:
+                    tokens.append((chunk, False, False))  # regular
+
+        # Теперь переносим по ширине и сохраняем форматирование
+        formatted_tokens = []
+        current_line_tokens = []
+        current_width = 0
+
+        for token_text, is_bold, is_italic in tokens:
+            # Разбиваем токен на слова
+            words = token_text.split()
+
+            for word in words:
+                # Проверяем ширину слова
+                font = self._get_font(base_font.size, is_bold) if is_bold else base_font
+                word_bbox = font.getbbox(word)
+                word_width = word_bbox[2] - word_bbox[0]
+
+                # Проверяем помещается ли слово в текущую строку
+                if current_width + word_width <= max_width or not current_line_tokens:
+                    current_line_tokens.append((word, is_bold, is_italic))
+                    current_width += word_width + 6  # + отступ между словами
+                else:
+                    # Переходим на новую строку
+                    if current_line_tokens:
+                        formatted_tokens.extend(current_line_tokens)
+                        formatted_tokens.append(('\n', False, False))  # маркер новой строки
+
+                    current_line_tokens = [(word, is_bold, is_italic)]
+                    current_width = word_width
+
+        # Добавляем последнюю строку
+        if current_line_tokens:
+            formatted_tokens.extend(current_line_tokens)
+
+        return formatted_tokens
+
     def _draw_multiline_text(self, draw: ImageDraw.ImageDraw, text: str, position: Tuple[int, int],
                            font: ImageFont.FreeTypeFont, fill: Tuple[int, int, int],
                            anchor: str = "lt", align: str = "left"):
@@ -629,6 +762,8 @@ class PILCardGenerator(BaseCardGenerator):
             logger.warning(f"Ошибка форматирования даты '{event_datetime}': {e}")
             return event_datetime
 
+
+
     def _load_telegram_fonts(self):
         """Загрузка шрифтов для Telegram-карточек."""
         font_paths = {
@@ -715,42 +850,94 @@ class PILCardGenerator(BaseCardGenerator):
             content_margin_right = 60
             content_width = width - content_margin_left - content_margin_right
 
-            # Предварительный расчет высоты контента
+            # Более точный расчет высоты контента
             estimated_content_height = 0
 
             # Расчет высоты заголовка
             if title:
-                char_width_title = font_title.getbbox("W")[2] - font_title.getbbox("W")[0] + 2
-                title_width = max(1, int(content_width / char_width_title))
-                title_lines = textwrap.wrap(title.upper(), width=title_width)
+                title_text = title.upper()
+                title_lines = self._safe_wrap_text(title_text, font_title, content_width)
                 title_line_height = font_title.getbbox("Hg")[3] - font_title.getbbox("Hg")[1] + 15
-                estimated_content_height += len(title_lines) * title_line_height
+                # Точные строки с переносами
+                title_lines_count = len(title_lines) if title_lines else 1
+                estimated_content_height += title_lines_count * title_line_height
 
             # Расчет высоты основного текста
             if body_text:
-                char_width_body = font_body.getbbox("W")[2] - font_body.getbbox("W")[0] + 1
-                body_width = max(1, int(content_width / char_width_body))
-                body_lines = textwrap.wrap(body_text, width=body_width)
-                body_line_height = font_body.getbbox("Hg")[3] - font_body.getbbox("Hg")[1] + 10
-                estimated_content_height += len(body_lines) * body_line_height + 20
+                formatted_tokens = self._format_markdown_text_telegram(body_text, font_body, content_width)
+                body_line_height = font_body.getbbox("Ag")[3] - font_body.getbbox("Ag")[1] + 10
+
+                # Подсчет количества строк с учетом переносов
+                current_x = 0
+                line_count = 1
+                for token_text, is_bold, is_italic in formatted_tokens:
+                    if token_text == '\n':
+                        line_count += 1
+                        current_x = 0
+                        continue
+
+                    font = self._get_font(font_body.size, is_bold)
+                    token_bbox = font.getbbox(token_text)
+                    token_width = token_bbox[2] - token_bbox[0]
+
+                    if current_x + token_width > content_width:
+                        line_count += 1
+                        current_x = token_width
+                    else:
+                        current_x += token_width + 6
+
+                estimated_content_height += line_count * body_line_height + 20
 
             # Расчет высоты плашек
             if location:
-                estimated_content_height += 60
+                estimated_content_height += 70  # Увеличил для запаса
             if audience:
-                estimated_content_height += 60
+                estimated_content_height += 70
 
-            estimated_content_height += 100  # Общие отступы
+            # Резервные отступы и пространство для ошибок расчета
+            estimated_content_height += 120  # Увеличил с 100
 
-            # Определяем размер изображения адаптивно
-            min_image_height = int(height * 0.3)
-            max_image_height = int(height * 0.7)
-            available_space_for_gradient = height - 80
+            # Определяем размер изображения адаптивно с учетом ограничений
+            min_image_height = int(height * 0.2)  # Снижаем минимум для большего пространства под текст
+            max_image_height = int(height * 0.6)  # Снижаем максимум для большего пространства под текст
+            available_space_for_gradient = height - 120  # Увеличиваем отступ
 
-            required_content_space = estimated_content_height + 60
-            if required_content_space > available_space_for_gradient - min_image_height:
+            required_content_space = estimated_content_height + 80  # Увеличиваем требуемое пространство
+
+            # Добавляем более агрессивную логику для больших размеров
+            if height > 1200:  # Для очень больших изображений (как Telegram)
+                min_image_height = int(height * 0.15)  # Еще меньше минимум
+                max_image_height = int(height * 0.5)   # Еще меньше максимум
+
+            min_required_space = min_image_height + required_content_space
+            max_available_space = height - 80  # Минимальные отступы
+
+            if min_required_space > max_available_space:
+                # Контент слишком большой, уменьшаем изображение до минимума + корректировка шрифтов
+                split_y = min_image_height
+                logger.warning(f"Контент слишком большой для размера {width}x{height}. Изображение будет сильно уменьшено. Уменьшаем шрифты.")
+
+                # Уменьшаем шрифты для лучшей вместимости
+                if height > 1200:
+                    font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 60, font_paths)
+                    font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 32, font_paths)
+                    font_pill = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 24, font_paths)
+                    font_npo = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 24, font_paths)
+                elif height > 1000:
+                    font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 70, font_paths)
+                    font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 35, font_paths)
+                    font_pill = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 26, font_paths)
+                    font_npo = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 26, font_paths)
+            elif required_content_space > available_space_for_gradient - min_image_height:
+                # Уменьшаем изображение пропорционально
                 split_y = max(min_image_height, available_space_for_gradient - required_content_space)
+
+                # Для средних случаев уменьшаем шрифты немного
+                if height > 1200 and required_content_space > available_space_for_gradient * 0.7:
+                    font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 75, font_paths)
+                    font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 37, font_paths)
             else:
+                # Используем максимальный размер изображения
                 split_y = max_image_height
 
             logger.info(f"Telegram-расчет: content_height={estimated_content_height}, split_y={split_y}")
@@ -781,48 +968,75 @@ class PILCardGenerator(BaseCardGenerator):
             # Координаты контента
             current_y = split_y + 60
 
-            # ЗАГОЛОВОК
-            if title:
-                char_width_title = font_title.getbbox("W")[2] - font_title.getbbox("W")[0] + 2
-                title_width = max(1, int(content_width / char_width_title))
-                title_lines = textwrap.wrap(title.upper(), width=title_width)
+            # ЗАГОЛОВОК - убран по требованию пользователя
+            # (Заголовок не отображается на Telegram карточках)
 
-                for line_idx, line in enumerate(title_lines):
-                    if current_y + (font_title.getbbox("Hg")[3] - font_title.getbbox("Hg")[1]) > height - 100:
-                        break
-                    draw.text((content_margin_left, current_y), line, font=font_title, fill=(255, 255, 255))
-                    current_y += (font_title.getbbox(line)[3] - font_title.getbbox(line)[1]) + 15
-
-            # ОСНОВНОЙ ТЕКСТ
+            # ОСНОВНОЙ ТЕКСТ с поддержкой Markdown
             if body_text:
                 current_y += 20
                 remaining_height = height - current_y - 120
                 max_body_lines = max(1, int(remaining_height / (font_body.getbbox("Hg")[3] - font_body.getbbox("Hg")[1] + 10)))
 
-                body_lines = textwrap.wrap(body_text, width=max(1, int(content_width / 15)))
-                body_lines = body_lines[:max_body_lines]
+                # Используем новую функцию обработки Markdown для Telegram
+                formatted_tokens = self._format_markdown_text_telegram(body_text, font_body, content_width)
 
-                for line in body_lines:
-                    if current_y + (font_body.getbbox("Hg")[3] - font_body.getbbox("Hg")[1]) > height - 120:
-                        break
-                    draw.text((content_margin_left, current_y), line, font=font_body, fill=(255, 255, 255))
-                    current_y += (font_body.getbbox(line)[3] - font_body.getbbox(line)[1]) + 10
+                # Рисуем форматированный текст
+                current_x = content_margin_left
+                line_start_y = current_y
+                token_index = 0
 
-                if len(body_lines) < len(textwrap.wrap(body_text, width=max(1, int(content_width / 15)))):
-                    draw.text((content_margin_left, current_y - 10), "...", font=font_body, fill=(255, 255, 255))
+                while token_index < len(formatted_tokens) and current_y < height - 120:
+                    token_text, is_bold, is_italic = formatted_tokens[token_index]
 
-            current_y += 30
+                    if token_text == '\n':
+                        # Новая строка
+                        current_x = content_margin_left
+                        current_y += font_body.getbbox("Ag")[3] - font_body.getbbox("Ag")[1] + 10
+                        token_index += 1
+                        continue
+
+                    # Выбираем шрифт
+                    font = self._get_font(font_body.size, is_bold)
+
+                    # Проверяем, поместится ли токен в текущей строке
+                    token_bbox = font.getbbox(token_text)
+                    token_width = token_bbox[2] - token_bbox[0]
+
+                    if current_x + token_width > content_margin_left + content_width:
+                        # Перенос на новую строку
+                        current_x = content_margin_left
+                        current_y += font_body.getbbox("Ag")[3] - font_body.getbbox("Ag")[1] + 10
+
+                        # Проверяем, не выйдем ли за пределы высоты
+                        if current_y >= height - 120:
+                            break
+
+                    # Рисуем токен
+                    draw.text((current_x, current_y), token_text, font=font, fill=(255, 255, 255))
+
+                    # Сдвигаем позицию
+                    current_x += token_width + 6  # + отступ между словами
+                    token_index += 1
+
+                # Если не все токены были отрисованы, добавляем "..."
+                if token_index < len(formatted_tokens):
+                    draw.text((content_margin_left, current_y + 50), "...", font=font_body, fill=(255, 255, 255))
+
+            current_y += 50  # Увеличил отступ после текста для предотвращения наложения
 
             # ПЛАШКИ
             available_height_for_pills = height - current_y - 20
 
+            # Рисуем плашки в центре по горизонтали, а не слева
+            pill_start_x = (width - 400) // 2  # Центрируем плашки (примерная ширина 400px)
+
             if location and available_height_for_pills > 60:
-                next_y = self._draw_telegram_pill(img, content_margin_left, current_y, location, 'pin', font_pill)
+                next_y = self._draw_telegram_pill(img, pill_start_x, current_y, location, 'pin', font_pill)
                 current_y = next_y
                 available_height_for_pills -= 60
 
             if audience and available_height_for_pills > 60:
-                next_y = self._draw_telegram_pill(img, content_margin_left, current_y, f"Для: {audience}", 'people', font_pill)
+                next_y = self._draw_telegram_pill(img, pill_start_x, current_y, f"Для: {audience}", 'people', font_pill)
                 current_y = next_y
 
             # ВЕРХНИЕ ПЛАШКИ

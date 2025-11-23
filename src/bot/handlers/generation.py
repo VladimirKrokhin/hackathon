@@ -305,8 +305,47 @@ async def generate_cards_handler(message: Message, state: FSMContext):
             # Fallback в случае ошибки
             card_content_for_template = f"{safe_content[:300]}..." if len(safe_content) > 300 else safe_content
 
+        # Генерируем нормальный заголовок для карточки на основе текста
+        await message.answer(
+            "🏷️ Создаю заголовок для карточки...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        try:
+            # Используем GPT для генерации привлекательного заголовка
+            title_generation_prompt = (
+                f"Исходный текст поста: {card_content_for_template}\n\n"
+                "Создай короткий, привлекательный заголовок (5-7 слов) для информационной карточки НКО. "
+                "Заголовок должен быть ярким, мотивирующим и побуждать к участию. "
+                "Не добавляй кавычки в ответе."
+            )
+
+            title = await card_text_generation_service.generate_text_content(title_generation_prompt, title_generation_prompt)
+
+            # Очищаем и ограничиваем длину заголовка
+            if title:
+                title = title.strip()
+                if len(title) > 50:  # Ограничиваем длину
+                    title = title[:47] + "..."
+            else:
+                # Fallback если GPT не сгенерировал заголовок
+                title = data.get('event_type', 'Событие НКО')[:30] + "..."
+
+            await message.answer(
+                f"✅ Заголовок готов: **{title}**",
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        except Exception as e:
+            logger.exception("Ошибка генерации заголовка для карточки, используем fallback")
+            # Fallback заголовок
+            title = data.get('event_type', 'Событие НКО')[:30] + "..."
+            if len(title) <= 3 or title == "...":  # Если получился слишком короткий
+                title = "Присоединяйтесь к событию!"
+
         template_data = {
-            "title": get_title_by_goal(goal or "🎯 Рассказать о мероприятии") or "Основная информация",
+            "title": title,
             "subtitle": subtitle or "",
             "content": card_content_for_template,
             "org_name": ngo_name or "Ваша НКО",
