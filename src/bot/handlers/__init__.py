@@ -10,6 +10,7 @@ from .callbacks import callbacks_router
 from .fallback import fallback_router
 from .ngo_info import ngo_info_router
 from .image_generation import image_generation_router
+from .wizard_handler import wizard_router
 
 router = Router(name="main_router")
 router.include_router(start_router)
@@ -20,6 +21,7 @@ router.include_router(refactoring_router)
 router.include_router(content_plan_router)
 router.include_router(text_editing_router)
 router.include_router(image_generation_router)
+router.include_router(wizard_router)
 router.include_router(callbacks_router)
 router.include_router(fallback_router)
 

@@ -4,6 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.types.input_file import BufferedInputFile
+from aiogram.enums.parse_mode import ParseMode
 
 from app import dp
 from bot.states import ImageGeneration
@@ -73,6 +74,7 @@ async def cancel_image_generation_handler(message: Message, state: FSMContext):
             "❎ Генерация изображения отменена.\n\n"
             "Что вы хотите сделать?",
             reply_markup=get_ngo_main_keyboard(),
+            parse_mode=ParseMode.MARKDOWN,
         )
 
 
@@ -145,4 +147,3 @@ async def size_handler(message: Message, state: FSMContext):
             reply_markup=get_ngo_main_keyboard(),
         )
         await state.clear()
-
