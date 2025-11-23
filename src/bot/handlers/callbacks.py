@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 # === ГЛАВНОЕ МЕНЮ ===
 @callbacks_router.callback_query(F.data == "create_content")
 async def create_content_handler(callback: CallbackQuery, state: FSMContext):
-    """Обработчик создания контента - показывает меню создания контента."""
+    """Обработчик создания контента - напрямую показывает меню форм создания."""
     await callback.answer()
-    from bot.keyboards.inline import get_content_creation_menu_keyboard
+    from bot.keyboards.inline import get_content_form_menu_keyboard
 
     await callback.message.answer(
         "📝 Создание контента\n\n"
-        "Выберите действие:",
-        reply_markup=get_content_creation_menu_keyboard()
+        "Выберите форму создания:",
+        reply_markup=get_content_form_menu_keyboard()
     )
 
 

@@ -19,7 +19,7 @@ class AbstractResponseProcessor(ABC):
 class YandexGPTResponseProcessor(AbstractResponseProcessor):
     def process_response(self, response: Dict) -> str:
         """
-        Обработка ответа от GPT
+        Обработка ответа от Yandex GPT
         """
         try:
             # Извлекаем текст из ответа
@@ -64,10 +64,6 @@ class YandexGPTResponseProcessor(AbstractResponseProcessor):
         
         # Удаляем восклицательные знаки вокруг реальных данных
         text = YandexGPTResponseProcessor._remove_exclamation_marks_around_data(text)
-        
-        # Фиксим двойные переносы строк
-        lines = [line.strip() for line in text.split("\n") if line.strip() != ""]
-        text = "\n".join(lines)
         
         # Убираем лишние пробелы в начале и конце
         text = text.strip()
