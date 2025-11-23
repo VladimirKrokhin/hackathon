@@ -45,6 +45,18 @@ def draw_icon(draw, icon_type, x, y, size, color):
         draw.ellipse([x + size/2, y, x + size/2 + size/3, y + size/3], fill=color)
         draw.pieslice([x + size/3, y + size/3, x + size, y + size], 270, 90, fill=color)
 
+    elif icon_type == 'datetime': # Иконка даты и времени
+        # Рисуем календарь
+        draw.rectangle([x, y, x + size, y + size], outline=color, width=2)
+        # Верхняя полоса календаря
+        draw.rectangle([x, y, x + size, y + size*0.3], fill=color)
+        # Точки на верхней полосе (дни недели)
+        dot_size = size * 0.05
+        for i in range(7):
+            dot_x = x + size*0.1 + i * size*0.12
+            dot_y = y + size*0.15
+            draw.ellipse([dot_x, dot_y, dot_x + dot_size, dot_y + dot_size], fill=(255,255,255))
+
 
 def load_font(font_names, size):
     """Перебирает список шрифтов и загружает первый найденный."""
@@ -110,6 +122,49 @@ def draw_pill(img, x, y, text, icon_type, font, text_color=(0,0,0), bg_color=(25
     draw.text((text_x, text_y), text, font=font, fill=text_color)
     
     return y + full_h + 15 # Возвращаем Y координату для следующего элемента (+ отступ)
+
+def format_datetime(event_datetime):
+    """Форматирует дату и время в читаемый формат: '15 декабря 2025, 14:00'"""
+    from datetime import datetime
+
+    # Названия месяцев на русском
+    months_ru = {
+        1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня",
+        7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+    }
+
+    try:
+        # Пробуем разные форматы входной даты
+        formats = [
+            "%Y-%m-%d %H:%M:%S",  # 2025-12-15 14:00:00
+            "%Y-%m-%d %H:%M",     # 2025-12-15 14:00
+            "%d.%m.%Y %H:%M",     # 15.12.2025 14:00
+            "%d.%m.%Y %H:%M:%S",  # 15.12.2025 14:00:00
+        ]
+
+        dt = None
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(event_datetime, fmt)
+                break
+            except ValueError:
+                continue
+
+        if dt is None:
+            # Если не удалось распарсить, возвращаем как есть
+            return event_datetime
+
+        # Форматируем в требуемый вид
+        day = dt.day
+        month_name = months_ru[dt.month]
+        year = dt.year
+        time_str = dt.strftime("%H:%M")
+
+        return f"{day} {month_name} {year}, {time_str}"
+
+    except Exception as e:
+        logger.warning(f"Ошибка форматирования даты '{event_datetime}': {e}")
+        return event_datetime
 
 def generate_card(
     ngo_name,
@@ -223,11 +278,29 @@ def generate_card(
     # Нарисуем "Date Pill" между текстом и локацией, если осталось место, или самой нижней.
     # Давайте добавим дату ПЕРЕД локацией, так логичнее.
     
-    # --- 4. ВЕРХНЯЯ ПЛАШКА (НКО) ---
-    # Рисуется поверх картинки в левом верхнем углу
+    # --- 4. ВЕРХНИЕ ПЛАШКИ ---
+    # Рисуются поверх картинки
+
+    # Плашка НКО в левом верхнем углу
     npo_text = f"НКО «{ngo_name}»"
     draw_pill(img, 40, 40, npo_text, 'building', font_npo)
-    
+
+    # Плашка даты в правом верхнем углу
+    formatted_datetime = format_datetime(event_datetime)
+    # Рассчитываем ширину плашки даты для позиционирования справа
+    draw_temp = ImageDraw.Draw(Image.new('RGB', (1, 1), (0,0,0)))  # Временный draw для расчета
+    padding_x = 20
+    icon_size = 30
+    icon_padding = 10
+    bbox = font_npo.getbbox(formatted_datetime)
+    text_w = bbox[2] - bbox[0]
+    pill_width = padding_x * 2 + icon_size + icon_padding + text_w
+
+    # Позиция X для правого выравнивания (аналогично отступу 40 слева)
+    date_x = width - pill_width - 40
+    draw_pill(img, date_x, 40, formatted_datetime, 'datetime', font_npo)
+
     # Сохранение
     img.save(output_path)
     logging.info(f"Генерация карточки завершена. Сохранено в {output_path}")
+
