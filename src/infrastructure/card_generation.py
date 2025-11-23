@@ -4,6 +4,7 @@ import aiohttp
 from aiohttp import web
 import threading
 import socket
+import os
 from pathlib import Path
 import aiofiles
 import time
@@ -14,7 +15,7 @@ from typing import Dict, Tuple, List
 import textwrap
 import re
 import io
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor, ImageOps
 from playwright.async_api import Browser, BrowserContext, Page
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from config import config
@@ -193,6 +194,9 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                         logger.info(f"Удалено временное фоновое изображение: {bg_image_path.name}")
                 except Exception as e:
                     logger.warning(f"Не удалось удалить временное фоновое изображение {data.get('background_image_path')}: {e}")
+
+
+
 
 
 class PILCardGenerator(BaseCardGenerator):
@@ -498,6 +502,356 @@ class PILCardGenerator(BaseCardGenerator):
             bbox = font.getbbox(token_text)
             current_x += bbox[2] - bbox[0] + 4  # + отступ между словами
 
+    def _create_telegram_gradient(self, width, height, color1, color2):
+        """Создает горизонтальный градиент для Telegram-карточек."""
+        base = Image.new('RGB', (width, height), color1)
+        top = Image.new('RGB', (width, height), color2)
+        mask = Image.new('L', (width, height))
+        mask_data = []
+        for y in range(height):
+            mask_data.extend([int(255 * (x / width)) for x in range(width)])
+        mask.putdata(mask_data)
+        base.paste(top, (0, 0), mask)
+        return base
+
+    def _draw_telegram_icon(self, draw, icon_type, x, y, size, color):
+        """Рисует схематичные иконки для Telegram."""
+        if icon_type == 'building':  # Иконка НКО
+            draw.rectangle([x, y + size*0.2, x + size, y + size], fill=color)
+            # Окна
+            w_size = size * 0.2
+            for i in range(2):
+                for j in range(2):
+                    draw.rectangle([x + size*0.2 + i*w_size*1.5, y + size*0.4 + j*w_size*1.5,
+                                    x + size*0.2 + i*w_size*1.5 + w_size, y + size*0.4 + j*w_size*1.5 + w_size], fill=(255,255,255))
+
+        elif icon_type == 'pin':  # Иконка локации
+            cx, cy = x + size/2, y + size/3
+            r = size/2.5
+            draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=color)
+            draw.polygon([cx, cy+r, cx-r/2, cy, cx+r/2, cy], fill=color)  # Ножка
+            draw.polygon([cx, y+size, cx-2, cy+r/2, cx+2, cy+r/2], fill=color)  # Острие
+            draw.ellipse([cx-r/3, cy-r/3, cx+r/3, cy+r/3], fill=(255,255,255))  # Точка внутри
+
+        elif icon_type == 'people':  # Иконка аудитории
+            # Человек 1
+            draw.ellipse([x, y, x + size/3, y + size/3], fill=color)  # Голова
+            draw.pieslice([x - size/6, y + size/3, x + size/2, y + size], 270, 90, fill=color)
+            # Человек 2
+            draw.ellipse([x + size/2, y, x + size/2 + size/3, y + size/3], fill=color)
+            draw.pieslice([x + size/3, y + size/3, x + size, y + size], 270, 90, fill=color)
+
+        elif icon_type == 'datetime':  # Иконка даты и времени
+            # Рисуем календарь
+            draw.rectangle([x, y, x + size, y + size], outline=color, width=2)
+            # Верхняя полоса календаря
+            draw.rectangle([x, y, x + size, y + size*0.3], fill=color)
+            # Точки на верхней полосе (дни недели)
+            dot_size = size * 0.05
+            for i in range(7):
+                dot_x = x + size*0.1 + i * size*0.12
+                dot_y = y + size*0.15
+                draw.ellipse([dot_x, dot_y, dot_x + dot_size, dot_y + dot_size], fill=(255,255,255))
+
+    def _draw_telegram_pill(self, img, x, y, text, icon_type, font, text_color=(0,0,0), bg_color=(255,255,255)):
+        """Рисует скругленную плашку с иконкой и текстом для Telegram."""
+        draw = ImageDraw.Draw(img)
+
+        # Отступы
+        padding_x = 20
+        padding_y = 10
+        icon_size = 30
+        icon_padding = 10
+
+        # Считаем размеры текста
+        bbox = font.getbbox(text)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+
+        # Полная ширина и высота плашки
+        full_w = padding_x * 2 + icon_size + icon_padding + text_w
+        full_h = padding_y * 2 + text_h + 10  # +10 для запаса на высоту шрифта
+
+        # Рисуем скругленный прямоугольник (фон)
+        shape = [(x, y), (x + full_w, y + full_h)]
+        draw.rounded_rectangle(shape, radius=full_h//2, fill=bg_color)
+
+        # Рисуем иконку
+        icon_x = x + padding_x
+        icon_y = y + (full_h - icon_size) // 2
+        self._draw_telegram_icon(draw, icon_type, icon_x, icon_y, icon_size, text_color)
+
+        # Рисуем текст
+        text_x = icon_x + icon_size + icon_padding
+        text_y = y + (full_h - text_h) // 2 - 5  # -5 небольшая коррекция базовой линии
+        draw.text((text_x, text_y), text, font=font, fill=text_color)
+
+        return y + full_h + 15  # Возвращаем Y координату для следующего элемента (+ отступ)
+
+    def _format_telegram_datetime(self, event_datetime):
+        """Форматирует дату и время в читаемый формат для Telegram: '15 декабря 2025, 14:00'"""
+        from datetime import datetime
+
+        # Названия месяцев на русском
+        months_ru = {
+            1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня",
+            7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+        }
+
+        try:
+            # Пробуем разные форматы входной даты
+            formats = [
+                "%Y-%m-%d %H:%M:%S",  # 2025-12-15 14:00:00
+                "%Y-%m-%d %H:%M",     # 2025-12-15 14:00
+                "%d.%m.%Y %H:%M",     # 15.12.2025 14:00
+                "%d.%m.%Y %H:%M:%S",  # 15.12.2025 14:00:00
+            ]
+
+            dt = None
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(event_datetime, fmt)
+                    break
+                except ValueError:
+                    continue
+
+            if dt is None:
+                return event_datetime
+
+            day = dt.day
+            month_name = months_ru[dt.month]
+            year = dt.year
+            time_str = dt.strftime("%H:%M")
+
+            return f"{day} {month_name} {year}, {time_str}"
+
+        except Exception as e:
+            logger.warning(f"Ошибка форматирования даты '{event_datetime}': {e}")
+            return event_datetime
+
+    def _load_telegram_fonts(self):
+        """Загрузка шрифтов для Telegram-карточек."""
+        font_paths = {
+            "arialbd.ttf": None,  # Arial Bold
+            "arial.ttf": None,    # Arial Regular
+            "DejaVuSans-Bold.ttf": None,
+            "LiberationSans-Bold.ttf": None,
+            "FreeSansBold.ttf": None,
+            "DejaVuSans.ttf": None,
+            "LiberationSans-Regular.ttf": None,
+            "FreeSans.ttf": None
+        }
+
+        # Стандартные пути к шрифтам в Linux
+        font_dirs = [
+            "/usr/share/fonts",
+            "/usr/share/fonts/truetype",
+            "/usr/share/fonts/truetype/dejavu",
+            "/usr/share/fonts/truetype/liberation",
+            "/usr/share/fonts/truetype/freefont"
+        ]
+
+        # Ищем доступные шрифты
+        for name in font_paths.keys():
+            for folder in font_dirs:
+                path = os.path.join(folder, name)
+                if os.path.exists(path):
+                    font_paths[name] = path
+                    break
+
+        logger.info(f"Telegram-шрифты загружены: {len([p for p in font_paths.values() if p])} найдено")
+        return font_paths
+
+    def _get_telegram_font(self, font_names, size, font_paths):
+        """Перебирает список шрифтов для Telegram-карточек и загружает первый найденный."""
+        for name in font_names:
+            # 1. Пробуем загрузить просто по имени
+            try:
+                font = ImageFont.truetype(name, size)
+                return font
+            except OSError:
+                # 2. Пробуем найти в путях
+                if font_paths.get(name) and os.path.exists(font_paths[name]):
+                    font = ImageFont.truetype(font_paths[name], size)
+                    return font
+
+        # Если ничего не нашли, возвращаем дефолтный
+        logger.warning(f"Telegram-шрифты {font_names} не найдены. Используется стандартный.")
+        return ImageFont.load_default()
+
+    async def _render_telegram_card(self, data: Dict, size: Tuple[int, int]) -> bytes:
+        """Генерация продвинутой карточки для Telegram с адаптивным размещением контента."""
+        try:
+            width, height = size
+
+            logger.info(f"Генерация Telegram-карточки: размер {width}x{height}")
+
+            # Извлекаем параметры
+            ngo_name = data.get('org_name', 'НКО')
+            event_datetime = data.get('event_date', '')
+            location = data.get('event_place', '')
+            audience = data.get('event_audience', '')
+            title = data.get('title', '')
+            body_text = data.get('content', '')
+            image_data = data.get('background_image_bytes')
+
+            # Загрузка шрифтов для Telegram
+            font_paths = self._load_telegram_fonts()
+
+            try:
+                font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 80, font_paths)
+                font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 40, font_paths)
+                font_pill = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 30, font_paths)
+                font_npo = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 30, font_paths)
+            except Exception as e:
+                logger.warning(f"Ошибка загрузки Telegram-шрифтов: {e}. Используем стандартные.")
+                font_title = font_body = font_pill = font_npo = ImageFont.load_default()
+
+            # Цвета градиента для Telegram
+            grad_color_1 = (225, 70, 220)  # Маджента/Розовый (слева)
+            grad_color_2 = (255, 220, 160)  # Персиковый/Желтый (справа)
+
+            content_margin_left = 60
+            content_margin_right = 60
+            content_width = width - content_margin_left - content_margin_right
+
+            # Предварительный расчет высоты контента
+            estimated_content_height = 0
+
+            # Расчет высоты заголовка
+            if title:
+                char_width_title = font_title.getbbox("W")[2] - font_title.getbbox("W")[0] + 2
+                title_width = max(1, int(content_width / char_width_title))
+                title_lines = textwrap.wrap(title.upper(), width=title_width)
+                title_line_height = font_title.getbbox("Hg")[3] - font_title.getbbox("Hg")[1] + 15
+                estimated_content_height += len(title_lines) * title_line_height
+
+            # Расчет высоты основного текста
+            if body_text:
+                char_width_body = font_body.getbbox("W")[2] - font_body.getbbox("W")[0] + 1
+                body_width = max(1, int(content_width / char_width_body))
+                body_lines = textwrap.wrap(body_text, width=body_width)
+                body_line_height = font_body.getbbox("Hg")[3] - font_body.getbbox("Hg")[1] + 10
+                estimated_content_height += len(body_lines) * body_line_height + 20
+
+            # Расчет высоты плашек
+            if location:
+                estimated_content_height += 60
+            if audience:
+                estimated_content_height += 60
+
+            estimated_content_height += 100  # Общие отступы
+
+            # Определяем размер изображения адаптивно
+            min_image_height = int(height * 0.3)
+            max_image_height = int(height * 0.7)
+            available_space_for_gradient = height - 80
+
+            required_content_space = estimated_content_height + 60
+            if required_content_space > available_space_for_gradient - min_image_height:
+                split_y = max(min_image_height, available_space_for_gradient - required_content_space)
+            else:
+                split_y = max_image_height
+
+            logger.info(f"Telegram-расчет: content_height={estimated_content_height}, split_y={split_y}")
+
+            # Создаем изображение
+            img = Image.new('RGB', (width, height), (255, 255, 255))
+
+            # Загружаем пользовательскую картинку
+            if image_data:
+                try:
+                    if isinstance(image_data, bytes):
+                        user_img = Image.open(io.BytesIO(image_data))
+                    else:
+                        user_img = Image.open(image_data)
+                    user_img = user_img.convert('RGB')
+                    user_img = ImageOps.fit(user_img, (width, split_y), method=Image.LANCZOS)
+                    img.paste(user_img, (0, 0))
+                except Exception as e:
+                    logger.warning(f"Ошибка загрузки картинки для Telegram: {e}")
+
+            # Создаем градиент для нижней части
+            gradient_h = height - split_y
+            gradient_img = self._create_telegram_gradient(width, gradient_h, grad_color_1, grad_color_2)
+            img.paste(gradient_img, (0, split_y))
+
+            draw = ImageDraw.Draw(img)
+
+            # Координаты контента
+            current_y = split_y + 60
+
+            # ЗАГОЛОВОК
+            if title:
+                char_width_title = font_title.getbbox("W")[2] - font_title.getbbox("W")[0] + 2
+                title_width = max(1, int(content_width / char_width_title))
+                title_lines = textwrap.wrap(title.upper(), width=title_width)
+
+                for line_idx, line in enumerate(title_lines):
+                    if current_y + (font_title.getbbox("Hg")[3] - font_title.getbbox("Hg")[1]) > height - 100:
+                        break
+                    draw.text((content_margin_left, current_y), line, font=font_title, fill=(255, 255, 255))
+                    current_y += (font_title.getbbox(line)[3] - font_title.getbbox(line)[1]) + 15
+
+            # ОСНОВНОЙ ТЕКСТ
+            if body_text:
+                current_y += 20
+                remaining_height = height - current_y - 120
+                max_body_lines = max(1, int(remaining_height / (font_body.getbbox("Hg")[3] - font_body.getbbox("Hg")[1] + 10)))
+
+                body_lines = textwrap.wrap(body_text, width=max(1, int(content_width / 15)))
+                body_lines = body_lines[:max_body_lines]
+
+                for line in body_lines:
+                    if current_y + (font_body.getbbox("Hg")[3] - font_body.getbbox("Hg")[1]) > height - 120:
+                        break
+                    draw.text((content_margin_left, current_y), line, font=font_body, fill=(255, 255, 255))
+                    current_y += (font_body.getbbox(line)[3] - font_body.getbbox(line)[1]) + 10
+
+                if len(body_lines) < len(textwrap.wrap(body_text, width=max(1, int(content_width / 15)))):
+                    draw.text((content_margin_left, current_y - 10), "...", font=font_body, fill=(255, 255, 255))
+
+            current_y += 30
+
+            # ПЛАШКИ
+            available_height_for_pills = height - current_y - 20
+
+            if location and available_height_for_pills > 60:
+                next_y = self._draw_telegram_pill(img, content_margin_left, current_y, location, 'pin', font_pill)
+                current_y = next_y
+                available_height_for_pills -= 60
+
+            if audience and available_height_for_pills > 60:
+                next_y = self._draw_telegram_pill(img, content_margin_left, current_y, f"Для: {audience}", 'people', font_pill)
+                current_y = next_y
+
+            # ВЕРХНИЕ ПЛАШКИ
+            self._draw_telegram_pill(img, 40, 40, f"НКО «{ngo_name}»", 'building', font_npo)
+
+            if event_datetime:
+                formatted_datetime = self._format_telegram_datetime(event_datetime)
+                padding_x = 20
+                icon_size = 30
+                icon_padding = 10
+                bbox = font_npo.getbbox(formatted_datetime)
+                text_w = bbox[2] - bbox[0]
+                pill_width = padding_x * 2 + icon_size + icon_padding + text_w
+                date_x = width - pill_width - 40
+                self._draw_telegram_pill(img, date_x, 40, formatted_datetime, 'datetime', font_npo)
+
+            # Конвертируем в bytes
+            from io import BytesIO
+            output = BytesIO()
+            img.save(output, format='PNG')
+            card_bytes = output.getvalue()
+
+            logger.info(f"Telegram-карточка успешно сгенерирована: {len(card_bytes)} байт")
+            return card_bytes
+
+        except Exception as e:
+            logger.error(f"Ошибка генерации Telegram-карточки: {e}")
+            raise
+
     async def render_card(
         self,
         template_name: str,
@@ -507,6 +861,11 @@ class PILCardGenerator(BaseCardGenerator):
         """
         Генерация карточки с помощью Pillow.
         """
+        # Проверяем, является ли это запросом на генерацию Telegram-карточки
+        if template_name == 'telegram_post':
+            return await self._render_telegram_card(data, size)
+
+        # Стандартная генерация PIL-карточки
         try:
             width, height = size
 

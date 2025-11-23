@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 class CardGenerationService:
     """Сервис генерации визуальных карточек для соцсетей."""
 
+
     def __init__(self, card_generator: BaseCardGenerator):
         self.card_generator = card_generator
 
@@ -59,7 +60,9 @@ class CardGenerationService:
         )
 
         try:
-            card_bytes = await self.card_generator.render_card(
+            generator = self.card_generator
+
+            card_bytes = await generator.render_card(
                 template_name=template_name,
                 data=data,
                 size=size,
