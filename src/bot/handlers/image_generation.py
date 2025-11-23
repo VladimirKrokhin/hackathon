@@ -128,6 +128,7 @@ async def size_handler(message: Message, state: FSMContext):
         await message.answer_photo(
             photo=BufferedInputFile(image_bytes, "generated_image.png"),
             caption=f"✅ Изображение готово!\n\n📝 Описание: {prompt}",
+            parse_mode=ParseMode.MARKDOWN,
         )
         
         await message.answer(

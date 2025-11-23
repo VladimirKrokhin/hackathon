@@ -362,7 +362,7 @@ def get_wizard_text_management_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🔄 Перегенерировать", callback_data="wizard_text_regenerate")],
             [InlineKeyboardButton(text="✏️ Исправить текст", callback_data="wizard_text_edit")],
             [InlineKeyboardButton(text="⚙️ Изменить параметры", callback_data="wizard_text_change_fields")],
-            [InlineKeyboardButton(text="✅ К изображению", callback_data="wizard_to_image")],
+            [InlineKeyboardButton(text="🎨 Генерация карточки", callback_data="wizard_to_image")],
             [InlineKeyboardButton(text="⬅️ Назад к настройкам", callback_data="wizard_back_to_setup")]
         ]
     )
@@ -415,7 +415,7 @@ def get_wizard_image_management_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Перегенерировать", callback_data="wizard_image_regenerate")],
             [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data="wizard_image_edit_prompt")],
-            [InlineKeyboardButton(text="✅ Завершить", callback_data="wizard_finish")],
+            [InlineKeyboardButton(text="🎨 Генерация карточки", callback_data="wizard_create_content")],
             [InlineKeyboardButton(text="⬅️ К тексту", callback_data="wizard_back_to_text")],
             [InlineKeyboardButton(text="↩️ К источнику", callback_data="wizard_back_to_image_source")]
         ]
@@ -451,5 +451,17 @@ def get_wizard_text_regenerate_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🎲 Случайные изменения", callback_data="wizard_regenerate_random")],
             [InlineKeyboardButton(text="✏️ Указать причину", callback_data="wizard_regenerate_custom")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="wizard_back_to_text_result")]
+        ]
+    )
+
+
+def get_wizard_card_ready_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для управления готовыми к публикации материалами."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Перегенерировать карточки", callback_data="wizard_regenerate_cards")],
+            [InlineKeyboardButton(text="✏️ Изменить текст карточки", callback_data="wizard_edit_card_text")],
+            [InlineKeyboardButton(text="📝 Написать промпт для карточки", callback_data="wizard_write_card_prompt")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="wizard_back_to_main")]
         ]
     )

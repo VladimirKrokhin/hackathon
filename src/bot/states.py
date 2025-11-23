@@ -86,6 +86,10 @@ class ContentWizard(StatesGroup):
     # Шаг 6: Финальное завершение
     waiting_for_wizard_final_confirm = State()
 
+    # Шаг 7: Редактирование текста карточки
+    waiting_for_wizard_card_text_edit = State()
+    waiting_for_wizard_card_prompt = State()
+
 
 class ContentPlan(StatesGroup):
     waiting_for_period = State()

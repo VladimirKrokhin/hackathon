@@ -16,6 +16,7 @@ from bot.keyboards.inline import (
     get_wizard_image_management_keyboard,
     get_wizard_final_confirm_keyboard,
     get_wizard_text_regenerate_keyboard,
+    get_wizard_card_ready_keyboard,
     get_narrative_style_keyboard,
     get_platform_keyboard,
 )
@@ -380,7 +381,7 @@ async def wizard_start_text_generation(message_or_callback, state: FSMContext):
             parse_mode=ParseMode.MARKDOWN,
         )
         await message_or_callback.answer(
-            f"{generated_text}\n\n"
+            f"{generated_text}\n\n",
             parse_mode=ParseMode.MARKDOWN,
         )
         await message_or_callback.answer(
@@ -644,13 +645,7 @@ async def wizard_back_to_text_result_handler(callback: CallbackQuery, state: FSM
     data = await state.get_data()
     generated_text = data.get("generated_text", "")
     await callback.message.answer(
-        "✅ **Текст поста готов!**\n\n"
-    )
-    await callback.message.answer(
-        f"{generated_text}\n\n"
-    )
-    await callback.message.answer(
-        "**Что делать с текстом?**",
+        f"✅ **Текст поста:**\n\n{generated_text}\n\n**Что делать с текстом?**",
         reply_markup=get_wizard_text_management_keyboard(),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -796,6 +791,7 @@ async def wizard_image_none_handler(callback: CallbackQuery, state: FSMContext):
         "✅ **Выбрано: Без фото**\n\n"
         "**Готово к финальной генерации контента?**",
         reply_markup=get_wizard_final_confirm_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
 
@@ -895,6 +891,7 @@ async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMConte
     await callback.message.answer(
         "🎨 **Генерируем изображение...**",
         reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
     try:
@@ -953,6 +950,7 @@ async def wizard_user_image_handler(message: Message, state: FSMContext):
             "✅ **Изображение загружено!**\n\n"
             "**Готово к финальной генерации контента?**",
             reply_markup=get_wizard_final_confirm_keyboard(),
+            parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
 
@@ -988,6 +986,7 @@ async def wizard_user_document_handler(message: Message, state: FSMContext):
             "✅ **Изображение загружено!**\n\n"
             "**Готово к финальной генерации контента?**",
             reply_markup=get_wizard_final_confirm_keyboard(),
+            parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
 
@@ -1029,6 +1028,7 @@ async def wizard_finish_handler(callback: CallbackQuery, state: FSMContext):
         "🎉 **Готово к финальной генерации контента!**\n\n"
         "Нажмите кнопку ниже для создания финального поста и карточек.",
         reply_markup=get_wizard_final_confirm_keyboard(),
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
 
@@ -1099,6 +1099,7 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
     await callback.message.answer(
         "🎨 **Создаем информационные карточки...**",
         reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
     try:
@@ -1258,6 +1259,7 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
         await callback.message.answer(
             "📝 **Ваш сгенерированный текст:**",
             reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
         )
         await callback.message.answer(
             generated_text,
@@ -1267,6 +1269,7 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
 
         await callback.message.answer(
             "✨ Все материалы готовы к публикации!",
+            reply_markup=get_wizard_card_ready_keyboard(),
         )
 
         await state.clear()  # Очищаем состояние после успешного завершения
@@ -1311,3 +1314,307 @@ async def wizard_back_to_setup_handler(callback: CallbackQuery, state: FSMContex
         "🔙 Возвращаемся к выбору формы:",
         reply_markup=get_wizard_mode_keyboard(),
     )
+
+
+# ===== ОБРАБОТЧИКИ КОМПЛЕКТАЦИИ КАРТОЧЕК =====
+
+@wizard_router.callback_query(F.data == "wizard_regenerate_cards")
+async def wizard_regenerate_cards_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик перегенерации карточек."""
+    await callback.answer()
+
+    await callback.message.answer(
+        "🔄 **Перегенерируем карточки...**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+    # Получаем сохраненные данные и перезапускаем генерацию карточек
+    data = await state.get_data()
+    if not data.get("generated_text"):
+        await callback.message.answer(
+            "❌ Ошибка: текст не найден. Попробуйте создать контент заново.",
+        )
+        return
+
+    # Перезапускаем финальную генерацию
+    await wizard_create_content_handler(callback, state)
+
+
+@wizard_router.callback_query(F.data == "wizard_edit_card_text")
+async def wizard_edit_card_text_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик редактирования текста карточки."""
+    await callback.answer()
+
+    await callback.message.answer(
+        "📝 **Редактирование текста карточки**\n\n"
+        "Опишите, как нужно изменить текст на карточке:\n\n"
+        "_Например: «Сократи текст», «Измени стиль», «Добавь больше призывов к действию»_",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await state.set_state(ContentWizard.waiting_for_wizard_card_text_edit)
+
+
+@wizard_router.callback_query(F.data == "wizard_write_card_prompt")
+async def wizard_write_card_prompt_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик написания промпта для текста карточки."""
+    await callback.answer()
+
+    await callback.message.answer(
+        "📝 **Создание промпта для текста карточки**\n\n"
+        "Опишите, какой текст должен быть на карточке:\n\n"
+        "_Например: «Сделай текст очень коротким, только суть события и контакты»_",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await state.set_state(ContentWizard.waiting_for_wizard_card_prompt)
+
+
+# ===== ОБРАБОТКА РЕДАКТИРОВАНИЯ ТЕКСТА КАРТОЧКИ =====
+
+@wizard_router.message(ContentWizard.waiting_for_wizard_card_text_edit, F.text)
+async def wizard_update_card_text_handler(message: Message, state: FSMContext):
+    """Обработка редактирования текста карточки."""
+    edit_instruction = message.text.strip()
+    await state.update_data(card_text_edit_instruction=edit_instruction)
+
+    await message.answer(
+        "✏️ **Обновляем текст карточки...**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+    try:
+        # Получаем текущий сгенерированный текст
+        data = await state.get_data()
+        current_text = data.get("generated_text", "")
+
+        # Используем text_editing сервис для редактирования
+        from services.text_editing import TextEditingService
+        editing_service = TextEditingService()
+
+        # Генерируем краткий текст специально для карточки с учетом инструкции
+        edited_card_text = await editing_service.edit_text(
+            text=current_text,
+            instructions=f"Создай краткий текст (до 300 символов) для карточки НКО: {edit_instruction}"
+        )
+
+        await state.update_data(card_custom_text=edited_card_text)
+
+        await message.answer(
+            "✅ **Текст карточки обновлен:*\n\n"
+            f"{edited_card_text}\n\n"
+            "🔄 **Перегенерируем карточки с новым текстом...**",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+        # Перезапускаем генерацию карточек с новым текстом
+        await wizard_regenerate_cards_from_text(message, state, edited_card_text)
+
+    except Exception as e:
+        logger.exception(f"Ошибка редактирования текста карточки: {e}")
+        await message.answer(
+            "❌ Ошибка редактирования текста карточки. Попробуем перегенерировать.",
+        )
+        await wizard_regenerate_cards_handler_from_message(message, state)
+
+
+# ===== ОБРАБОТКА ПРОМПТА ДЛЯ ТЕКСТА КАРТОЧКИ =====
+
+@wizard_router.message(ContentWizard.waiting_for_wizard_card_prompt, F.text)
+async def wizard_generate_card_from_prompt_handler(message: Message, state: FSMContext):
+    """Обработка промпта для создания текста карточки."""
+    card_prompt = message.text.strip()
+    await state.update_data(card_text_prompt=card_prompt)
+
+    await message.answer(
+        "🤖 **Создаю текст для карточки по вашему промпту...**",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+    try:
+        # Генерируем новый текст для карточки на основе промпта
+        text_generation_service = dp["text_content_generation_service"]
+
+        # Получаем данные из state
+        data = await state.get_data()
+        original_text = data.get("generated_text", "")
+
+        # Создаем промпт для генерации текста карточки
+        card_generation_prompt = (
+            f"Исходный текст: {original_text[:500]}...\n\n"
+            f"Задача: {card_prompt}\n\n"
+            "Создай краткий текст (до 300 символов) для информационной карточки НКО."
+        )
+
+        card_text = await text_generation_service.generate_text_content(card_generation_prompt, card_generation_prompt)
+
+        if card_text and len(card_text.strip()) > 10 and len(card_text.strip()) < 300:
+            await state.update_data(card_custom_text=card_text.strip())
+
+            await message.answer(
+                "✅ **Текст для карточки создан:*\n\n"
+                f"{card_text}\n\n"
+                "🔄 **Перегенерируем карточки с новым текстом...**",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+            # Перезапускаем генерацию карточек с новым текстом
+            await wizard_regenerate_cards_from_text(message, state, card_text.strip())
+        else:
+            await message.answer(
+                "⚠️ **Созданный текст не подходит для карточки. Попробуйте другой промпт.**",
+                reply_markup=get_wizard_card_ready_keyboard(),
+            )
+
+    except Exception as e:
+        logger.exception(f"Ошибка генерации текста карточки по промпту: {e}")
+        await message.answer(
+            "❌ Ошибка создания текста карточки. Попробуйте перегенерацию.",
+        )
+        await wizard_regenerate_cards_handler_from_message(message, state)
+
+
+async def wizard_regenerate_cards_from_text(message: Message, state: FSMContext, card_text: str):
+    """Перегенерация карточек с указанным текстом."""
+    try:
+        # Получаем сохраненные данные из Wizard
+        data = await state.get_data()
+        platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
+
+        # Получаем информацию об НКО из базы данных
+        from app import dp
+        ngo_service = dp["ngo_service"]
+        user_id = message.from_user.id
+        ngo_data = ngo_service.get_ngo_data(user_id)
+
+        # Устанавливаем значения по умолчанию
+        ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
+        ngo_contact = ngo_data.get("ngo_contact", "тел: +7 (XXX) XXX-XX-XX") if ngo_data else "тел: +7 (XXX) XXX-XX-XX"
+
+        # Получаем изображение
+        generated_image = None
+        image_source = data.get("image_source", "")
+        if image_source == "🤖 Сгенерировать ИИ":
+            generated_image = data.get("generated_image")
+        elif image_source == "📎 Загрузить своё":
+            generated_image = data.get("user_image")
+
+        # Определяем подзаголовок в зависимости от режима
+        wizard_mode = data.get("wizard_mode", "structured")
+        if wizard_mode == "structured":
+            subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
+        else:
+            subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
+
+        # Подготавливаем данные для генерации карточек
+        from bot.utils import (
+            get_title_by_goal,
+            get_color_by_goal,
+            get_secondary_color_by_goal,
+            get_template_by_platform,
+        )
+
+        goal = "🎯 Рассказать о мероприятии"
+        template_data = {
+            "title": get_title_by_goal(goal) or "Основная информация",
+            "subtitle": subtitle or "",
+            "content": card_text,  # Используем переданный кастомный текст
+            "org_name": ngo_name or "Ваша НКО",
+            "contact_info": ngo_contact or "",
+            "primary_color": get_color_by_goal(goal) or "#667eea",
+            "secondary_color": get_secondary_color_by_goal(goal) or "#764ba2",
+            "text_color": "#333333",
+            "background_color": "#f5f7fa",
+        }
+
+        # Добавляем специфические данные для структурированной формы
+        if wizard_mode == "structured":
+            template_data.update({
+                "event_type": data.get('event_type', ''),
+                "event_date": data.get('event_date', ''),
+                "event_place": data.get('event_place', ''),
+                "event_audience": data.get('event_audience', ''),
+                "event_details": data.get('event_details', ''),
+                "narrative_style": data.get('narrative_style', ''),
+            })
+
+        # Добавляем данные для свободной формы
+        if wizard_mode == "free_form":
+            template_data.update({
+                "user_description": data.get('user_description', ''),
+                "narrative_style": data.get('narrative_style', ''),
+            })
+
+        # Добавляем изображение для фона карточки
+        if generated_image:
+            template_data["background_image_bytes"] = generated_image
+
+        from services.card_generation import CardGenerationService
+        card_generation_service: CardGenerationService = dp["card_generation_service"]
+        template_name = get_template_by_platform(platform)
+
+        cards = await card_generation_service.generate_multiple_cards(
+            template_name=template_name,
+            data=template_data,
+            platform=platform,
+        )
+
+        if not cards:
+            raise ValueError("Генератор карточек ничего не вернул")
+
+        # Отправляем результаты
+        from bot.utils import get_caption_for_card_type
+
+        await message.answer(
+            "🎨 **Обновленные карточки для соцсетей:**",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        for card_type, image_bytes in cards.items():
+            caption = get_caption_for_card_type(card_type, platform)
+            from aiogram.types.input_file import BufferedInputFile
+            await message.answer_photo(
+                photo=BufferedInputFile(image_bytes, f"updated_wizard_{card_type}.png"),
+                caption=caption,
+                reply_markup=ReplyKeyboardRemove(),
+            )
+
+        await message.answer(
+            "✨ **Обновленные материалы готовы к публикации!**",
+            reply_markup=get_wizard_card_ready_keyboard(),
+        )
+
+    except Exception as e:
+        logger.exception(f"Ошибка перегенерации карточек: {e}")
+        await message.answer(
+            "❌ Ошибка создания обновленных карточек. Попробуйте снова.",
+            reply_markup=get_wizard_card_ready_keyboard(),
+        )
+
+
+async def wizard_regenerate_cards_handler_from_message(message: Message, state: FSMContext):
+    """Перегенерация карточек из message handler'а."""
+    await message.answer(
+        "🔄 **Перегенерируем карточки...**",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+    try:
+        # Создаем callback-like объект для передачи в основную функцию
+        class MockCallback:
+            def __init__(self, message):
+                self.message = message
+                self.from_user = message.from_user
+
+        mock_callback = MockCallback(message)
+        await wizard_create_content_handler(mock_callback, state)
+
+    except Exception as e:
+        logger.exception(f"Ошибка перегенерации карточек: {e}")
+        await message.answer(
+            "❌ Ошибка перегенерации карточек. Попробуйте снова.",
+            reply_markup=get_wizard_card_ready_keyboard(),
+        )
