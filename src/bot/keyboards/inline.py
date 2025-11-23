@@ -177,7 +177,7 @@ def get_platform_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="📱 ВКонтакте (для молодежи)", callback_data="platform_vk")],
             [InlineKeyboardButton(text="💬 Telegram (для взрослых/бизнеса)", callback_data="platform_telegram")],
-            [InlineKeyboardButton(text="📸 Instagram (визуальный контент)", callback_data="platform_instagram")],
+            [InlineKeyboardButton(text="🌐 Сайт (для информационных материалов)", callback_data="platform_website")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_previous")]
         ]
     )
