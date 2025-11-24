@@ -20,6 +20,7 @@ from playwright.async_api import Playwright
 
 from config import config
 from bot.handlers import router
+from service_bus import service_bus
 from infrastructure.prompt_builder import YandexGPTPromptBuilder
 from infrastructure.response_processor import YandexGPTResponseProcessor
 from infrastructure.card_generation import (
@@ -89,20 +90,6 @@ async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatc
     """
     logger.info("Инициализация сервиса генерации карточек Playwright...")
 
-    async def start_http_server(dispatcher: Dispatcher):
-        """Запускает HTTP-сервер для выдачи файлов."""
-        http_server_manager = HTTPServerManager(TEMPLATES_DIR, port=8000)
-
-        logger.info("Запускаю HTTP-сервер...")
-        server_started = http_server_manager.start_in_thread()
-        if server_started:
-            logger.info("HTTP-сервер успешно запущен")
-        else:
-            logger.warning("Не удалось запустить HTTP-сервер")
-            raise Exception("Не удалось запустить HTTP-сервер")
-
-        return http_server_manager
-        
     async def init_browser() -> tuple[Browser, Playwright]:
         """Инициализирует сущность браузера для Playwright."""
         ARGS = [
@@ -120,40 +107,52 @@ async def build_playwright_card_generation_service(bot: Bot, dispatcher: Dispatc
         )
         return (browser, playwright)
 
-    async def close_browser(browser: Browser, playwright: Playwright) -> None:
-        """Останавливает браузер Playwright и высвобождает ресурсы."""
-        logger.info("Закрываю браузер Playwright...")
+    async def start_http_server() -> HTTPServerManager:
+        """Запускает HTTP-сервер для выдачи файлов."""
+        http_server_manager = HTTPServerManager(TEMPLATES_DIR, port=8000)
 
-        browser_context: BrowserContext = dp.get("browser_context")
+        logger.info("Запускаю HTTP-сервер...")
+        server_started = http_server_manager.start_in_thread()
+        if server_started:
+            logger.info("HTTP-сервер успешно запущен")
+        else:
+            logger.warning("Не удалось запустить HTTP-сервер")
+            raise Exception("Не удалось запустить HTTP-сервер")
+
+        return http_server_manager
+        
+    async def close_browser_and_stop_server(
+        browser: Browser, 
+        playwright: Playwright, 
+        http_server_manager: HTTPServerManager,
+        dispatcher: Dispatcher
+    ):
+        """Закрывает браузер и останавливает HTTP-сервер."""
+        logger.info("Закрываю браузер Playwright...")
+        browser_context: BrowserContext = dispatcher.get("browser_context")
         if browser_context:
             await browser_context.close()
             
         await browser.close()
         await playwright.stop()
 
-    async def stop_http_server(http_server_manager: HTTPServerManager):
-        """Останавливает HTTP-сервер."""
-        logger.info("Остановка HTTP-сервера...")
+        logger.info("Останавливаю HTTP-сервер...")
         await http_server_manager.stop()
 
-    async def on_shutdown(browser: Browser, playwright: Playwright, http_server_manager: HTTPServerManager):
-        """Остановка и освобождение ресурсов."""
-
-        # TODO: переделай на шину
-        await close_browser(browser, playwright)
-        await stop_http_server(http_server_manager)
-
-    dp = dispatcher
-
+    # Инициализация компонентов
     browser, playwright = await init_browser()
-    http_server_manager = await start_http_server(dp)
+    http_server_manager = await start_http_server()
 
     # Хранит зависимости в диспетчере
-    dp["browser"]: Browser = browser
-    dp["playwright"]: Playwright = playwright
-    dp["http_server_manager"]: HTTPServerManager = http_server_manager
+    dispatcher["browser"]: Browser = browser
+    dispatcher["playwright"]: Playwright = playwright
+    dispatcher["http_server_manager"]: HTTPServerManager = http_server_manager
 
-    dp["on_shutdown"] = lambda: on_shutdown(browser, playwright, http_server_manager)
+    # Регистрация shutdown функции в ServiceBus
+    shutdown_func = lambda: close_browser_and_stop_server(
+        browser, playwright, http_server_manager, dispatcher
+    )
+    service_bus.register_shutdown(shutdown_func)
     
     card_generator = PlaywrightCardGenerator(browser=browser)
     service = CardGenerationService(card_generator=card_generator)
@@ -221,6 +220,20 @@ async def build_content_plan_services(bot: Bot) -> tuple[ContentPlanService, Not
     notification_service = NotificationService(bot, content_plan_repository)
     scheduler = ContentPlanScheduler(notification_service)
     
+    # Регистрация функций запуска и остановки планировщика в ServiceBus
+    def start_scheduler():
+        """Запускает планировщик."""
+        scheduler.start()
+        logger.info("Планировщик уведомлений контент-плана запущен")
+
+    def stop_scheduler():
+        """Останавливает планировщик."""
+        scheduler.stop()
+        logger.info("Планировщик уведомлений остановлен")
+
+    service_bus.register_startup(start_scheduler)
+    service_bus.register_shutdown(stop_scheduler)
+    
     logger.info("Сервисы контент-плана успешно инициализированы")
     return content_plan_service, notification_service, scheduler, content_plan_repository
 
@@ -242,7 +255,6 @@ def build_ngo_service() -> NGOService:
     return NGOService(ngo_repository)
 
 # Конфигурация фабричных методов
-# TODO: перепиши на абстрактную фабрику - выдели отдельный класс
 _create_content_generation_service: TextContentGenerationService = build_yandexgpt_content_generation_service
 _create_card_generation_service: CardGenerationService = build_pil_card_generation_service
 _create_image_generation_service: ImageGenerationService = build_fusion_brain_image_generation_service
@@ -292,11 +304,8 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], ro
     logger.info("Инициализирую бота и подготавливаю окружение")
     await build_services(bot, dispatcher)
     
-    # Запускаем планировщик уведомлений
-    scheduler = dispatcher.get("content_plan_scheduler")
-    if scheduler:
-        scheduler.start()
-        logger.info("Планировщик уведомлений контент-плана запущен")
+    # Выполняем все зарегистрированные startup функции через ServiceBus
+    await service_bus.execute_startup()
 
 
 async def on_shutdown(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], router: Router):
@@ -311,18 +320,8 @@ async def on_shutdown(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], r
     """
     logger.info("Останавливаю бота")
 
-    # Останавливаем планировщик
-    scheduler = dispatcher.get("content_plan_scheduler")
-    if scheduler:
-        scheduler.stop()
-        logger.info("Планировщик уведомлений остановлен")
-
-    dp = dispatcher
-    # TODO: перепиши на шину
-    on_shutdown = dp.get("on_shutdown")
-
-    if on_shutdown:
-        await on_shutdown()
+    # Выполняем все зарегистрированные shutdown функции через ServiceBus
+    await service_bus.execute_shutdown()
 
 
 async def bootstrap(bot: Bot, dispatcher: Dispatcher):
