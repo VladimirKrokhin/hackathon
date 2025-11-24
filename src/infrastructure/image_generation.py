@@ -209,7 +209,6 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         width: int,
         height: int,
         images: int,
-        negative_prompt: Optional[str] = None,
     ) -> str:
         """
         Запускает генерацию изображения и возвращает UUID задачи.
@@ -231,6 +230,9 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         Raises:
             Exception: При ошибке запуска генерации или недоступности API
         """
+        negative_prompt = ("размыто, низкое качество, плохая анатомия, искажения, артефакты, водяной знак, "
+                           "текст, подпись, обрезано, уродливо, пикселизация")
+
         # Получаем pipeline_id если он не установлен
         pipeline_id = self.pipeline_id
         if not pipeline_id:
@@ -245,14 +247,11 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
             "numImages": images,
             "width": width,
             "height": height,
+            "negativePromptDecoder": negative_prompt,
             "generateParams": {
                 "query": prompt
             }
         }
-        
-        # Добавляем негативный промпт если указан
-        if negative_prompt:
-            params["negativePromptDecoder"] = negative_prompt
         
         data = FormData()
         data.add_field('pipeline_id', pipeline_id)
@@ -424,7 +423,6 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         width: int = 1024,
         height: int = 1024,
         images: int = 1,
-        negative_prompt: Optional[str] = None,
     ) -> bytes:
         """
         Генерирует изображение по текстовому описанию.
@@ -450,20 +448,22 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
             Для более сложной обработки рекомендуется использовать отдельный prompt builder.
         """
         # Предобработка промпта, временное решение, позже нужно сделать полноценный prompt builder
-        sections = ["Качественное изображение, реализм, 4k, нет искажений, ",
-                    "соответствует описанию, реальное изображение. ",
-                    "Нет артефактов и искажений. "]
+        sections.extend(
+            [
+                "качественное изображение, профессиональное фото, 4k, 8k, гиперреализм, высокая детализация, ",
+                "f/1.8, боке, фотореалистичность, ISO 100, реальное изображение, ",
+                "кинематографичное освещение, объемный свет, студийный свет, мягкое свечение, ray tracing"
+            ]
+        )
 
         people_keys = ["человек", "люди", "мужчина", "женщина", "ребенок"]  # Переделать
         if any(word in prompt for word in people_keys):
-            sections.append("У людей нормальные руки и ноги, люди изображены отчетливо. ")
-
-        sections.append(f"Описание изображения: {prompt}")
+            sections.append(", у людей нормальные руки и ноги, люди изображены отчетливо. ")
 
         prompt = "\n".join(sections).strip()
 
         # Запускаем генерацию
-        uuid = await self._start_generation(prompt, width, height, images, negative_prompt)
+        uuid = await self._start_generation(prompt, width, height, images)
         
         # Ожидаем завершения
         result = await self._wait_for_completion(uuid)
