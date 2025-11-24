@@ -1,3 +1,11 @@
+"""
+Обработчики генерации контента для Telegram-бота.
+
+Модуль содержит обработчики для завершения генерации текстового контента
+и создания визуальных карточек для социальных сетей. Включает логику
+обработки изображений, генерации заголовков и создания карточек различных форматов.
+"""
+
 import io
 import logging
 
@@ -20,17 +28,36 @@ from bot.utils import (
 from services.content_generation import TextContentGenerationService
 from services.card_generation import CardGenerationService
 
+# Создаем роутер для обработки сообщений генерации
 generation_router = Router(name="generation")
 
+# Настройка логирования для модуля
 logger = logging.getLogger(__name__)
 
 
-async def complete_generation_handler(message: Message, state: FSMContext):
-    """Универсальная функция завершения генерации контента."""
+async def complete_generation_handler(message: Message, state: FSMContext) -> None:
+    """
+    Универсальная функция завершения генерации текстового контента.
+    
+    Функция обрабатывает завершающий этап генерации контента, включая:
+    - Получение данных пользователя из состояния FSM
+    - Генерацию текстового контента с помощью YandexGPT
+    - Обработку изображений (ИИ генерация, загрузка пользователя или без фото)
+    - Переход к генерации карточек или запрос выбора фото для карточек
+    
+    Args:
+        message (Message): Входящее сообщение от пользователя
+        state (FSMContext): Контекст состояния конечного автомата
+        
+    Raises:
+        Exception: При ошибке генерации текстового контента
+        Exception: При ошибке генерации изображения
+    """
+    # Получаем данные из состояния
     data = await state.get_data()
     user_text = data.get("user_text", "")
     
-    # Определяем цель на основе данных
+    # Извлекаем параметры генерации
     goal = data.get("goal", "🎯 Рассказать о мероприятии")
     platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
     
@@ -49,11 +76,13 @@ async def complete_generation_handler(message: Message, state: FSMContext):
     
     generated_post = None
 
+    # Уведомляем пользователя о начале генерации
     await message.answer(
         "🧠 Генерирую контент...",
         reply_markup=ReplyKeyboardRemove(),
-        )
+    )
 
+    # Генерируем текстовый контент
     try:
         text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
         generated_post = await text_generation_service.generate_text_content(data, user_text)
@@ -66,18 +95,18 @@ async def complete_generation_handler(message: Message, state: FSMContext):
         )
         raise error
 
-    # Показываем сгенерированный пост
+    # Показываем сгенерированный пост пользователю
     await message.answer(
-        f"✅ Ваш сгенерированный контент:",
+        "✅ Ваш сгенерированный контент:",
         reply_markup=ReplyKeyboardRemove(),
     )
     await message.answer(
         generated_post,
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=ReplyKeyboardRemove(),
-        )
+    )
 
-    # Обработка изображения для карточки
+    # Обработка изображения для основного контента
     image_source = data.get("image_source")
     user_image = data.get("user_image")
     image_prompt = data.get("image_prompt")
@@ -85,6 +114,7 @@ async def complete_generation_handler(message: Message, state: FSMContext):
 
     logger.info(f"Обработка изображения: source={image_source}, user_image={'есть' if user_image else 'нет'}, prompt={image_prompt[:50] + '...' if image_prompt and len(image_prompt) > 50 else image_prompt}")
 
+    # Обработка различных источников изображения
     if image_source == "🤖 Сгенерировать ИИ" and image_prompt:
         await message.answer(
             "🎨 Генерирую изображение ИИ...",
@@ -101,12 +131,14 @@ async def complete_generation_handler(message: Message, state: FSMContext):
                 event_context = f". Стиль: иллюстрация к событию '{data.get('event_type', '')}' в '{data.get('event_place', '')}' для '{data.get('event_audience', '')}'"
                 smart_prompt += event_context
             logger.info(f"Генерируем изображение с промпт: {smart_prompt}")
+            
             generated_image = await image_generation_service.generate_image(
                 prompt=smart_prompt,
                 width=1024,
                 height=768
             )
             logger.info(f"Изображение сгенерировано, размер: {len(generated_image) if generated_image else 0} байт")
+            
             # Сохраняем AI-сгенерированное изображение в состояние
             await state.update_data(ai_generated_image=generated_image)
             await message.answer(
@@ -139,12 +171,11 @@ async def complete_generation_handler(message: Message, state: FSMContext):
     # Если пользователь уже выбрал генерацию ИИ изображения для общего контента,
     # автоматически используем его для карточки вместо повторного выбора
     if image_source == "🤖 Сгенерировать ИИ":
-        # Автоматически переходим к генерации карточек с существующим изображением
         logger.info("Пользователь выбрал AI изображение для контента - пропускаем выбор фото для карточки")
         await generate_cards_handler(message, state)
         return
 
-    # Спрашиваем у пользователя выбор фото для карточки только если не выбрана генерация ИИ для контента
+    # Спрашиваем у пользователя выбор фото для карточки
     await message.answer(
         "🖼️ **Выберите источник фото для информационных карточек:**",
         reply_markup=ReplyKeyboardRemove(),
@@ -156,15 +187,33 @@ async def complete_generation_handler(message: Message, state: FSMContext):
         reply_markup=get_card_photo_choice_keyboard(),
     )
     await state.set_state(ContentGeneration.waiting_for_card_photo_choice)
-    return
 
 
-async def generate_cards_handler(message: Message, state: FSMContext):
-    """Функция для генерации карточек после выбора фото."""
+async def generate_cards_handler(message: Message, state: FSMContext) -> None:
+    """
+    Функция для генерации визуальных карточек после выбора изображения.
+    
+    Обрабатывает финальный этап создания контента - генерацию визуальных карточек
+    для различных социальных платформ. Включает:
+    - Обработку выбранного изображения для карточки
+    - Генерацию краткого контента специально для карточки
+    - Создание привлекательного заголовка
+    - Рендеринг карточек в различных форматах
+    - Отправку готовых материалов пользователю
+    
+    Args:
+        message (Message): Входящее сообщение от пользователя  
+        state (FSMContext): Контекст состояния конечного автомата
+        
+    Raises:
+        ValueError: Если генератор карточек не вернул результат
+        Exception: При ошибке генерации карточек
+    """
+    # Получаем данные из состояния
     data = await state.get_data()
     user_text = data.get("user_text", "")
 
-    # Определяем цель на основе данных
+    # Извлекаем параметры генерации
     goal = data.get("goal", "🎯 Рассказать о мероприятии")
     platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
 
@@ -177,8 +226,8 @@ async def generate_cards_handler(message: Message, state: FSMContext):
     ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
     ngo_contact = ngo_data.get("ngo_contact", "тел: +7 (XXX) XXX-XX-XX") if ngo_data else "тел: +7 (XXX) XXX-XX-XX"
 
+    # Получаем ранее сгенерированный пост и изображение
     generated_post = data.get("generated_post", "")
-    # Получаем общее изображение из состояния (для показа отдельно после генерации карточек)
     image_source = data.get("image_source", "")
     generated_image = None
     if image_source == "🤖 Сгенерировать ИИ":
@@ -186,6 +235,7 @@ async def generate_cards_handler(message: Message, state: FSMContext):
     elif image_source == "📎 Загрузить своё":
         generated_image = data.get("user_image")
 
+    # Уведомляем о начале создания карточек
     await message.answer(
         "🎨 Создаю информационные карточки...",
         reply_markup=ReplyKeyboardRemove(),
@@ -217,6 +267,7 @@ async def generate_cards_handler(message: Message, state: FSMContext):
                     if not image_generation_service:
                         raise Exception("Сервис генерации изображений не инициализирован")
 
+                    # Формируем контекстный промпт для карточки
                     smart_card_prompt = card_image_prompt
                     if data.get("generation_mode") == "structured":
                         event_context = f". Для события '{data.get('event_type', '')}' в '{data.get('event_place', '')}'"
@@ -261,11 +312,12 @@ async def generate_cards_handler(message: Message, state: FSMContext):
                 "✅ Выбрано: Без фото для карточки",
                 reply_markup=ReplyKeyboardRemove(),
             )
+
         # Логируем ключевые данные для отладки
         logger.info(f"Данные для карточки: goal='{goal}', platform='{platform}', ngo_name='{ngo_name}', ngo_contact='{ngo_contact}'")
         logger.info(f"Сгенерированный пост: {generated_post[:100]}...")
 
-        # Определяем подзаголовок в зависимости от режима
+        # Определяем подзаголовок в зависимости от режима генерации
         if data.get("generation_mode") == "structured":
             subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
         else:
@@ -274,24 +326,23 @@ async def generate_cards_handler(message: Message, state: FSMContext):
         # Сохраняем полный пост как fallback
         safe_content = generated_post if generated_post and isinstance(generated_post, str) else "Сгенерированный контент"
 
-        # Вместо простого обрезания используем GPT для сокращения контента специально для карточки
+        # Генерируем краткий контент специально для карточки
         await message.answer(
             "🤖 Создаю краткий контент для карточки...",
             reply_markup=ReplyKeyboardRemove(),
         )
 
         try:
-            # Генерируем сокращенный контент специально для карточки
+            # Используем GPT для создания сокращенного контента
             card_text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
             card_content = await card_text_generation_service.generate_card_content(data, generated_post)
 
-            # Используем сгенерированный сокращенный контент, если он получился короче 300 символов
-            # Иначе используем обрезанный полный пост как fallback
+            # Проверяем качество сгенерированного контента
             if card_content and len(card_content.strip()) > 10 and len(card_content.strip()) < 300:
                 card_content_for_template = card_content.strip()
                 logger.info(f"Используем сокращенный контент для карточки: {len(card_content)} символов")
             else:
-                # Fallback - обрезаем текст если GPT дал слишком длинный результат
+                # Fallback - обрезаем текст если GPT дал неподходящий результат
                 card_content_for_template = f"{safe_content[:300]}..." if len(safe_content) > 300 else safe_content
                 logger.warning(f"GPT дал неподходящий контент ({len(card_content) if card_content else 0} символов), используем fallback")
 
@@ -305,14 +356,14 @@ async def generate_cards_handler(message: Message, state: FSMContext):
             # Fallback в случае ошибки
             card_content_for_template = f"{safe_content[:300]}..." if len(safe_content) > 300 else safe_content
 
-        # Генерируем нормальный заголовок для карточки на основе текста
+        # Генерируем привлекательный заголовок для карточки
         await message.answer(
             "🏷️ Создаю заголовок для карточки...",
             reply_markup=ReplyKeyboardRemove(),
         )
 
         try:
-            # Используем GPT для генерации привлекательного заголовка
+            # Используем GPT для генерации заголовка
             title_generation_prompt = (
                 f"Исходный текст поста: {card_content_for_template}\n\n"
                 "Создай короткий, привлекательный заголовок (5-7 слов) для информационной карточки НКО. "
@@ -344,6 +395,7 @@ async def generate_cards_handler(message: Message, state: FSMContext):
             if len(title) <= 3 or title == "...":  # Если получился слишком короткий
                 title = "Присоединяйтесь к событию!"
 
+        # Подготавливаем данные для шаблона карточки
         template_data = {
             "title": title,
             "subtitle": subtitle or "",
@@ -380,7 +432,6 @@ async def generate_cards_handler(message: Message, state: FSMContext):
             })
 
         # Добавляем изображение для фона карточки
-        # PILCardGenerator в первую очередь проверяет background_image_bytes
         card_image_to_use = card_generated_image if card_generated_image else generated_image
         if card_image_to_use:
             # Передаем изображение напрямую как bytes для PILCardGenerator
@@ -392,6 +443,7 @@ async def generate_cards_handler(message: Message, state: FSMContext):
         # Логируем полные данные шаблона для отладки
         logger.info(f"Full template_data: {template_data}")
 
+        # Получаем подходящий шаблон для платформы и генерируем карточки
         template_name = get_template_by_platform(platform)
         logger.info(f"Using template: {template_name} for platform: {platform}")
         card_generation_service: CardGenerationService = dp["card_generation_service"]
@@ -405,7 +457,7 @@ async def generate_cards_handler(message: Message, state: FSMContext):
         if not cards:
             raise ValueError("Генератор карточек ничего не вернул")
 
-        # Отправляем сгенерированное ИИ изображение сначала отдельно
+        # Отправляем сгенерированное ИИ изображение отдельно (если есть)
         if generated_image and image_source == "🤖 Сгенерировать ИИ":
             await message.answer(
                 "🖼️ **Вот ваше сгенерированное изображение:**",
@@ -418,10 +470,11 @@ async def generate_cards_handler(message: Message, state: FSMContext):
                 reply_markup=ReplyKeyboardRemove(),
             )
 
+        # Отправляем готовые карточки
         await message.answer(
             "🎨 Вот ваши карточки для соцсетей:",
             reply_markup=ReplyKeyboardRemove(),
-            )
+        )
 
         for card_type, image_bytes in cards.items():
             caption = get_caption_for_card_type(card_type, platform)
@@ -432,6 +485,7 @@ async def generate_cards_handler(message: Message, state: FSMContext):
                 reply_markup=ReplyKeyboardRemove(),
             )
 
+        # Предлагаем дальнейшие действия
         await message.answer(
             "✨ Все материалы готовы к публикации! Что хотите сделать дальше?",
             reply_markup=get_post_generation_keyboard(),
@@ -445,11 +499,3 @@ async def generate_cards_handler(message: Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove(),
         )
         raise error
-
-
-# @generation_router.message(ContentGeneration.waiting_for_user_text, F.text)
-# async def user_text_handler(message: Message, state: FSMContext):
-#     """Обработчик для старого режима генерации (совместимость)."""
-#     user_text = message.text.strip()
-#     await state.update_data(user_text=user_text)
-#     await complete_generation_handler(message, state)

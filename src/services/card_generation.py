@@ -1,3 +1,12 @@
+"""
+Сервис генерации визуальных карточек для социальных сетей.
+
+Данный модуль предоставляет высокоуровневый интерфейс для создания
+карточек различного типа для разных социальных платформ.
+Обеспечивает автоматическое определение размеров карточек в зависимости
+от платформы и типа контента.
+"""
+
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -8,10 +17,28 @@ logger = logging.getLogger(__name__)
 
 
 class CardGenerationService:
-    """Сервис генерации визуальных карточек для соцсетей."""
-
+    """
+    Сервис для генерации визуальных карточек для социальных сетей.
+    
+    Предоставляет удобный интерфейс для создания карточек различных
+    типов и размеров для разных социальных платформ. Автоматически
+    определяет оптимальные размеры в зависимости от платформы
+    и типа контента.
+    
+    Поддерживает:
+    - Генерацию одиночных карточек
+    - Пакетную генерацию нескольких типов карточек
+    - Настраиваемые размеры
+    - Автоматическое определение размеров для платформ
+    """
 
     def __init__(self, card_generator: BaseCardGenerator):
+        """
+        Инициализация сервиса генерации карточек.
+        
+        Args:
+            card_generator (BaseCardGenerator): Генератор карточек (PIL или Playwright)
+        """
         self.card_generator = card_generator
 
     def _get_size_for_platform(
@@ -20,14 +47,27 @@ class CardGenerationService:
         card_type: str = "post",
         custom_size: Optional[Tuple[int, int]] = None,
     ) -> Tuple[int, int]:
-        """Определение размера на основе платформы и типа карточки."""
+        """
+        Определение размера карточки на основе платформы и типа.
+        
+        Автоматически выбирает оптимальные размеры карточки в зависимости
+        от целевой социальной платформы и типа контента.
+        
+        Args:
+            platform (str): Название социальной платформы
+            card_type (str): Тип карточки ('post', 'story', 'square', 'og')
+            custom_size (Optional[Tuple[int, int]]): Пользовательский размер
+            
+        Returns:
+            Tuple[int, int]: Размер карточки (ширина, высота)
+        """
         if custom_size:
             return custom_size
 
-        # Находим конфигурацию для платформы
+        # Поиск конфигурации для платформы
         for platform_key, sizes in config.SOCIAL_MEDIA_SIZES.items():
             if platform_key in platform or platform in platform_key:
-                # Определяем тип карточки
+                # Определение типа карточки
                 if card_type == "story" and "story" in sizes:
                     return (sizes["story"]["width"], sizes["story"]["height"])
                 elif card_type == "square" and "post_square" in sizes:
@@ -41,7 +81,7 @@ class CardGenerationService:
                     return (sizes["og"]["width"], sizes["og"]["height"])
                 break
 
-        # Дефолтные размеры
+        # Размеры по умолчанию
         return config.DEFAULT_SIZE
 
     async def generate_card(
@@ -52,7 +92,26 @@ class CardGenerationService:
         card_type: str = "post",
         custom_size: Optional[Tuple[int, int]] = None,
     ) -> bytes:
-        """Генерация одной карточки."""
+        """
+        Генерация одной карточки для указанной платформы.
+        
+        Создает карточку на основе HTML шаблона с заданными данными.
+        Автоматически определяет размер в зависимости от платформы
+        или использует пользовательские размеры.
+        
+        Args:
+            template_name (str): Имя HTML шаблона для рендеринга
+            data (Dict): Данные для подстановки в шаблон карточки
+            platform (str): Целевая социальная платформа
+            card_type (str): Тип карточки ('post', 'story', 'square', 'og')
+            custom_size (Optional[Tuple[int, int]]): Пользовательские размеры
+            
+        Returns:
+            bytes: Сгенерированная карточка в формате PNG
+            
+        Raises:
+            Exception: При ошибке генерации карточки
+        """
         size = self._get_size_for_platform(platform, card_type, custom_size)
         logger.info(
             f"Генерация карточки: шаблон={template_name}, "
@@ -81,7 +140,29 @@ class CardGenerationService:
         card_types: Optional[List[str]] = None,
         custom_sizes: Optional[Dict[str, Tuple[int, int]]] = None,
     ) -> Dict[str, bytes]:
-        """Генерация нескольких карточек для разных типов."""
+        """
+        Генерация нескольких карточек для разных типов контента.
+        
+        Создает набор карточек различного типа для одной платформы.
+        Полезно для создания адаптивного контента под разные форматы
+        публикации (обычные посты, истории, квадратные форматы).
+        
+        Args:
+            template_name (str): Имя HTML шаблона для рендеринга
+            data (Dict): Данные для подстановки в шаблоны
+            platform (str): Целевая социальная платформа
+            card_types (Optional[List[str]]): Список типов карточек для генерации
+            custom_sizes (Optional[Dict[str, Tuple[int, int]]]): 
+                Пользовательские размеры для каждого типа карточек
+                
+        Returns:
+            Dict[str, bytes]: Словарь сгенерированных карточек, 
+                             где ключ - тип карточки, значение - bytes изображения
+                             
+        Raises:
+            ValueError: Если не удалось сгенерировать ни одной карточки
+            Exception: При ошибке генерации любой из карточек
+        """
         card_types = card_types or ["post"]
         logger.info(
             f"Генерация {len(card_types)} карточек: "

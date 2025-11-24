@@ -1,3 +1,16 @@
+"""
+Инфраструктура генерации карточек для социальных сетей.
+
+Данный модуль предоставляет интерфейсы и реализации для создания
+карточек различными способами:
+- PlaywrightCardGenerator: генерация с помощью браузера и Jinja2 шаблонов
+- PILCardGenerator: генерация с помощью библиотеки Pillow (PIL)
+- HTTPServerManager: управление HTTP-сервером для обслуживания шаблонов
+
+Модуль поддерживает создание карточек для различных платформ
+включая Telegram, ВКонтакте и веб-сайты.
+"""
+
 import logging
 import asyncio
 import aiohttp
@@ -25,8 +38,14 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 logger = logging.getLogger(__name__)
 
+
 class BaseCardGenerator(ABC):
-    """Общая функциональность генераторов карточек."""
+    """
+    Базовый абстрактный класс для генераторов карточек.
+    
+    Определяет интерфейс для всех генераторов карточек,
+    которые могут создавать визуальный контент для различных платформ.
+    """
 
     @abstractmethod
     async def render_card(
@@ -35,24 +54,47 @@ class BaseCardGenerator(ABC):
         data: Dict,
         size: Tuple[int, int],
     ) -> bytes:
-        """Генерация карточки."""
+        """
+        Генерация карточки по шаблону с заданными данными.
+        
+        Args:
+            template_name (str): Имя HTML шаблона для рендеринга
+            data (Dict): Данные для подстановки в шаблон
+            size (Tuple[int, int]): Размер карточки (ширина, высота)
+            
+        Returns:
+            bytes: Изображение карточки в формате PNG
+            
+        Raises:
+            Exception: При ошибке генерации карточки
+        """
         pass
 
 
 class PlaywrightCardGenerator(BaseCardGenerator):
     """
-    Генерирует карточки с помощью Playwright и Jinja2.
+    Генератор карточек с использованием Playwright и Jinja2.
+    
+    Использует браузерную автоматизацию для создания карточек
+    на основе HTML шаблонов с Jinja2. Подходит для сложных
+    дизайнов с CSS и JavaScript.
     """
 
     def __init__(self, browser: Browser):
+        """
+        Инициализация генератора карточек Playwright.
+        
+        Args:
+            browser (Browser): Экземпляр браузера Playwright
+        """
         self.browser = browser
         
-        # Настраиваем окружение Jinja2 для загрузки HTML-шаблонов
+        # Настройка окружения Jinja2 для загрузки HTML шаблонов
         self.jinja_env = Environment(
             loader=FileSystemLoader(TEMPLATES_DIR),
             autoescape=select_autoescape(['html', 'xml'])
         )
-        logger.info(f"Jinja2 Environment настроен на {TEMPLATES_DIR.resolve()}")
+        logger.info(f"Jinja2 окружение настроено для {TEMPLATES_DIR.resolve()}")
 
     
     async def render_card(
@@ -62,23 +104,37 @@ class PlaywrightCardGenerator(BaseCardGenerator):
         size: Tuple[int, int],
     ) -> bytes:
         """
-        Генерация карточки в изолированном контексте с использованием HTTP-сервера
-        для корректной загрузки ресурсов (изображений, стилей).
-        """
+        Генерация карточки в изолированном контексте с использованием HTTP-сервера.
         
+        Создает карточку с помощью браузера, используя временный HTTP-сервер
+        для корректной загрузки ресурсов (изображений, стилей, шрифтов).
+        
+        Args:
+            template_name (str): Имя HTML шаблона без расширения
+            data (Dict): Данные для подстановки в шаблон
+            size (Tuple[int, int]): Размер карточки (ширина, высота)
+            
+        Returns:
+            bytes: Скриншот карточки в формате PNG
+            
+        Raises:
+            Exception: При ошибке генерации или недоступности браузера
+        """
         context: BrowserContext | None = None
         page: Page | None = None
         temp_file_path: Path | None = None
         
         try:
             if not self.browser.is_connected():
-                logger.error("Браузер был отключен! Невозможно создать карточку.")
+                logger.error("Браузер отключен! Невозможно создать карточку.")
                 raise Exception("Браузер не подключен.")
 
+            # Закрываем предыдущий контекст если есть
             last_context: BrowserContext = dp.get("browser_context")
             if last_context:
                 await last_context.close()
 
+            # Создаем новый контекст и страницу
             context = await self.browser.new_context()
             dp["browser_context"]: BrowserContext = context
             
@@ -87,7 +143,7 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             # Определяем размер
             width, height = size
             
-            # Определяем данные (контекст) для Jinja-шаблона
+            # Значения по умолчанию для шаблона
             defaults = {
                 'title': 'Контент от НКО',
                 'subtitle': '',
@@ -104,18 +160,18 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                 'cta_link': '#'
             }
 
-            # Данные из 'data' перезапишут значения по умолчанию
+            # Объединяем данные пользователя с defaults
             template_data = {**defaults, **data}
 
-            # Детальная отладка данных шаблона
-            logger.info("=== JINJA2 TEMPLATE DATA DEBUG ===")
+            # Логирование данных шаблона для отладки
+            logger.info("=== JINJA2 ДАННЫЕ ШАБЛОНА ===")
             for key, value in template_data.items():
                 if key == 'background_image' and isinstance(value, str) and len(value) > 100:
-                    logger.info(f"{key}: [base64 image data, {len(value)} chars]")
+                    logger.info(f"{key}: [base64 изображение, {len(value)} символов]")
                 else:
-                    logger.info(f"{key}: '{value}' (type: {type(value).__name__})")
+                    logger.info(f"{key}: '{value}' (тип: {type(value).__name__})")
 
-            # Проверяем критические переменные
+            # Проверка критических переменных
             critical_vars = ['title', 'content', 'org_name']
             for var in critical_vars:
                 if not template_data.get(var):
@@ -126,39 +182,39 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             template = self.jinja_env.get_template(template_filename)
             html_content = template.render(template_data)
 
-            # Логируем информацию для отладки
-            logger.info(f"Jinja2 template: {template_filename}")
-            logger.info(f"Template data keys: {list(template_data.keys())}")
-            logger.info(f"HTML content length: {len(html_content)} chars")
+            # Логирование информации для отладки
+            logger.info(f"Jinja2 шаблон: {template_filename}")
+            logger.info(f"Ключи данных шаблона: {list(template_data.keys())}")
+            logger.info(f"Длина HTML контента: {len(html_content)} символов")
 
-            # Журналируем первые 1000 символов отрендеренного HTML для отладки
-            logger.info(f"HTML content preview: {html_content[:1000]}...")
+            # Логирование первых 1000 символов HTML для отладки
+            logger.info(f"Превью HTML контента: {html_content[:1000]}...")
             if 'Карточка' not in html_content and template_data.get('title'):
                 logger.warning("Отсутствие заголовка в HTML!")
             if 'НКО' not in html_content and template_data.get('org_name'):
                 logger.warning("Отсутствие названия организации в HTML!")
 
-            # Создаем временный HTML файл для правильной загрузки ресурсов
+            # Создание временного HTML файла для корректной загрузки ресурсов
             unique_id = str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
             temp_filename = f"temp_card_{unique_id}.html"
             temp_file_path = TEMPLATES_DIR / temp_filename
 
-            # Записываем HTML в файл
+            # Запись HTML в файл
             async with aiofiles.open(temp_file_path, 'w', encoding='utf-8') as f:
                 await f.write(html_content)
 
-            logger.info(f"Created temp file: {temp_filename}")
+            logger.info(f"Создан временный файл: {temp_filename}")
             
-            # Настраиваем размер
+            # Настройка размера viewport
             await page.set_viewport_size({"width": width, "height": height})
             
-            # Загружаем HTML через HTTP для корректной загрузки ресурсов
+            # Загрузка HTML через HTTP для корректной загрузки ресурсов
             await page.goto(f"http://localhost:8000/{temp_filename}", wait_until="networkidle")
             
-            # Ждем загрузки всех ресурсов
+            # Ожидание загрузки всех ресурсов
             await page.wait_for_load_state("networkidle")
             
-            # Делаем скриншот
+            # Создание скриншота
             screenshot_bytes = await page.screenshot(
                 type='png',
                 full_page=False
@@ -169,15 +225,15 @@ class PlaywrightCardGenerator(BaseCardGenerator):
             
         except Exception as e:
             logger.error(f"Ошибка генерации карточки '{template_name}': {e}")
-            raise # Пробрасываем ошибку выше, чтобы ее обработал хэндлер
+            raise # Пробрасываем ошибку выше для обработки хендлером
             
         finally:
-            # Закрываем страницу и контекст, освобождая ресурсы.
+            # Закрываем страницу и контекст, освобождая ресурсы
             if page:
                 await page.close()
             if context:
                 await context.close()
-            # Удаляем временный файл
+            # Удаление временного файла
             if temp_file_path and temp_file_path.exists():
                 try:
                     temp_file_path.unlink()
@@ -185,7 +241,7 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                 except Exception as e:
                     logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {e}")
 
-            # Удаляем временное фоновое изображение если оно было указано
+            # Удаление временного фонового изображения если оно было указано
             if data.get("background_image_path"):
                 try:
                     bg_image_path = Path(data["background_image_path"])
@@ -196,12 +252,9 @@ class PlaywrightCardGenerator(BaseCardGenerator):
                     logger.warning(f"Не удалось удалить временное фоновое изображение {data.get('background_image_path')}: {e}")
 
 
-
-
-
 class PILCardGenerator(BaseCardGenerator):
     """
-    Генерирует карточки с помощью Pillow (PIL) без использования браузера.
+    Генератор карточек с использованием Pillow (PIL).
     """
 
     def __init__(self):
@@ -214,7 +267,9 @@ class PILCardGenerator(BaseCardGenerator):
         logger.info("PILCardGenerator инициализирован")
 
     def _load_fonts(self):
-        """Загрузка доступных шрифтов с поддержкой кириллицы."""
+        """
+        Загрузка шрифтов.
+        """
         try:
             # Расширенный список шрифтов с поддержкой кириллицы
             font_candidates = [
@@ -244,7 +299,7 @@ class PILCardGenerator(BaseCardGenerator):
             self.bold_font_path = None
             self.regular_font_path = None
 
-            # Ищем доступные шрифты
+            # Поиск доступных шрифтов
             for font_path, font_type in font_candidates:
                 if Path(font_path).exists():
                     if font_type == "bold":
@@ -254,11 +309,11 @@ class PILCardGenerator(BaseCardGenerator):
 
             logger.info(f"Шрифты загружены: regular={self.regular_font_path}, bold={self.bold_font_path}")
 
-            # Тестируем загрузку шрифтов
+            # Тестирование загрузки шрифтов
             try:
                 if self.regular_font_path:
                     test_font = self._get_font(12, False)
-                    # Тестируем с кириллицей
+                    # Тестирование с кириллицей
                     test_bbox = test_font.getbbox("Тест")
                     logger.info(f"Шрифт regular протестирован: bbox={test_bbox}")
 
@@ -276,7 +331,16 @@ class PILCardGenerator(BaseCardGenerator):
             self.bold_font_path = None
 
     def _get_font(self, size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-        """Получение шрифта из кэша или создание нового."""
+        """
+        Получение шрифта из кэша или создание нового.
+        
+        Args:
+            size (int): Размер шрифта
+            bold (bool): Использовать жирный шрифт
+            
+        Returns:
+            ImageFont.FreeTypeFont: Экземпляр шрифта
+        """
         cache_key = f"{'bold' if bold else 'regular'}_{size}"
 
         if cache_key not in self.font_cache:
@@ -293,7 +357,15 @@ class PILCardGenerator(BaseCardGenerator):
         return self.font_cache[cache_key]
 
     def _hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
-        """Конвертация hex цвета в RGB."""
+        """
+        Конвертация hex цвета в RGB.
+        
+        Args:
+            hex_color (str): Цвет в hex формате (например, '#667eea')
+            
+        Returns:
+            Tuple[int, int, int]: RGB кортеж
+        """
         try:
             return ImageColor.getrgb(hex_color)
         except Exception as e:
@@ -301,11 +373,22 @@ class PILCardGenerator(BaseCardGenerator):
             return (102, 126, 234)  # default primary_color
 
     def _create_gradient_background(self, width: int, height: int, start_color: str, end_color: str) -> Image.Image:
-        """Создание градиентного фона."""
+        """
+        Создание градиентного фона.
+        
+        Args:
+            width (int): Ширина изображения
+            height (int): Высота изображения
+            start_color (str): Начальный цвет в hex
+            end_color (str): Конечный цвет в hex
+            
+        Returns:
+            Image.Image: Изображение с градиентом
+        """
         start_rgb = self._hex_to_rgb(start_color)
         end_rgb = self._hex_to_rgb(end_color)
 
-        # Создаем градиентное изображение
+        # Создание градиентного изображения
         gradient = Image.new('RGB', (width, height))
         draw = ImageDraw.Draw(gradient)
 
@@ -321,7 +404,17 @@ class PILCardGenerator(BaseCardGenerator):
         return gradient
 
     def _wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
-        """Перенос текста по словам с учетом максимальной ширины."""
+        """
+        Перенос текста по словам с учетом максимальной ширины.
+        
+        Args:
+            text (str): Исходный текст
+            font (ImageFont.FreeTypeFont): Шрифт для расчета ширины
+            max_width (int): Максимальная ширина строки
+            
+        Returns:
+            str: Текст с переносами строк
+        """
         if not text:
             return ""
 
@@ -330,7 +423,7 @@ class PILCardGenerator(BaseCardGenerator):
         current_line = ""
 
         for word in words:
-            # Проверяем ширину текущей линии с новым словом
+            # Проверка ширины текущей линии с новым словом
             test_line = current_line + (" " if current_line else "") + word
             bbox = font.getbbox(test_line)
             line_width = bbox[2] - bbox[0]
@@ -342,7 +435,7 @@ class PILCardGenerator(BaseCardGenerator):
                 if current_line:
                     lines.append(current_line)
                 if '\n' in word:
-                    # Разбиваем слово с переносом
+                    # Разбиение слова с переносом
                     word_parts = word.split('\n')
                     current_line = word_parts[-1]  # Последняя часть - начало новой линии
                     lines.extend(word_parts[:-1])  # Остальные части добавляем как отдельные линии
@@ -355,17 +448,24 @@ class PILCardGenerator(BaseCardGenerator):
         return '\n'.join(lines)
 
     def _safe_wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
-        """Безопасный перенос текста с гарантией, что ни одна строка не выйдет за max_width.
-
-        Возвращает список строк, каждая из которых гарантированно помещается по ширине.
+        """
+        Безопасный перенос текста с гарантией помещения в max_width.
+        
+        Args:
+            text (str): Исходный текст
+            font (ImageFont.FreeTypeFont): Шрифт для расчета ширины
+            max_width (int): Максимальная ширина строки
+            
+        Returns:
+            List[str]: Список строк, каждая гарантированно помещается по ширине
         """
         if not text:
             return []
 
-        # Сначала используем textwrap для базового переноса
+        # Использование textwrap для базового переноса
         import textwrap
 
-        # Приблизительный расчет ширины символа для textwrap (усредненный)
+        # Приблизительный расчет ширины символа
         avg_char_width = font.getbbox("W")[2] - font.getbbox("W")[0] + 2
         max_chars = max(1, int(max_width / avg_char_width))
 
@@ -376,14 +476,14 @@ class PILCardGenerator(BaseCardGenerator):
         safe_lines = []
 
         for line in wrapped_lines:
-            # Последняя проверка ширины каждой строки
+            # Проверка ширины каждой строки
             bbox = font.getbbox(line)
             line_width = bbox[2] - bbox[0]
 
             if line_width <= max_width:
                 safe_lines.append(line)
             else:
-                # Если строка все равно слишком широкая, режем ее посимвольно
+                # Порезка строки посимвольно если все равно слишком широкая
                 current_line = ""
                 for char in line:
                     test_line = current_line + char
@@ -400,103 +500,303 @@ class PILCardGenerator(BaseCardGenerator):
 
         return safe_lines
 
-    def _format_markdown_text_telegram(self, text: str, base_font: ImageFont.FreeTypeFont, max_width: int) -> List[Tuple[str, bool, bool]]:
-        """Парсинг простого Markdown текста для Telegram-карточек.
-
-        Поддерживает:
-        - **bold** текст
-        - *italic* текст (placeholder для будущего расширения)
-
-        Возвращает список кортежей: (text_chunk, is_bold, is_italic)
+    async def render_card(
+        self,
+        template_name: str,
+        data: Dict,
+        size: Tuple[int, int],
+    ) -> bytes:
         """
-        if not text:
-            return []
+        Генерация карточки с помощью Pillow.
+        
+        Создает карточку программно, поддерживает:
+        - Стандартные карточки с градиентами и текстом
+        - Специальные Telegram карточки с адаптивным дизайном
+        - Поддержку Markdown форматирования
+        
+        Args:
+            template_name (str): Имя шаблона ('telegram_post' для специальных Telegram карточек)
+            data (Dict): Данные для карточки
+            size (Tuple[int, int]): Размер карточки (ширина, высота)
+            
+        Returns:
+            bytes: Изображение карточки в формате PNG
+            
+        Raises:
+            Exception: При ошибке генерации карточки
+        """
+        # Проверяем, является ли это запросом на генерацию Telegram-карточки
+        if template_name == 'telegram_post':
+            return await self._render_telegram_card(data, size)
 
-        # Удаляем старые маркеры форматирования рекурсивно
-        text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\*\*\1\*', text)  # ***text*** -> **text*
-        text = re.sub(r'___(.+?)___', r'\*\*\1\*', text)        # ___text___ -> **text*
+        # Стандартная генерация PIL-карточки
+        try:
+            width, height = size
 
-        # Разбиваем на токены по правилам markdown
-        tokens = []
-        i = 0
-        while i < len(text):
-            if text[i:i+2] == '**':
-                # Найдем конец bold текста
-                end = text.find('**', i+2)
-                if end != -1:
-                    bold_text = text[i+2:end]
-                    if bold_text:
-                        tokens.append((bold_text, True, False))  # bold
-                    i = end + 2
-                else:
-                    # Не найден закрывающий маркер, добавляем как обычный текст
-                    tokens.append((text[i], False, False))
-                    i += 1
-            elif text[i] == '*':
-                # Найдем конец italic текста
-                end = text.find('*', i+1)
-                if end != -1:
-                    italic_text = text[i+1:end]
-                    if italic_text:
-                        tokens.append((italic_text, False, True))  # italic (пока без курсива)
-                    i = end + 1
-                else:
-                    # Не найден закрывающий маркер, добавляем как обычный текст
-                    tokens.append((text[i], False, False))
-                    i += 1
+            # Получение данных с значениями по умолчанию
+            defaults = {
+                'title': 'Контент от НКО',
+                'subtitle': '',
+                'content': '',
+                'footer': 'НКО',
+                'primary_color': '#667eea',
+                'secondary_color': '#764ba2',
+                'text_color': '#333',
+                'background_color': '#f5f7fa',
+                'org_name': 'НКО',
+                'contact_info': '',
+                'stats': [],
+                'cta_text': '',
+                'cta_link': '#'
+            }
+
+            template_data = {**defaults, **data}
+
+            logger.info(f"Генерация карточки PIL: {template_name}, размер {width}x{height}")
+
+            # Создание основного изображения
+            img = Image.new('RGBA', (width, height), (255, 255, 255, 0))
+            draw = ImageDraw.Draw(img)
+
+            # 1. ФОН - Градиент или фоновое изображение
+            gradient_bg = self._create_gradient_background(
+                width, height,
+                template_data['primary_color'],
+                template_data['secondary_color']
+            )
+
+            # Проверка background_image_bytes и background_image_url
+            background_img = None
+            if template_data.get('background_image_bytes'):
+                try:
+                    bg_bytes = template_data['background_image_bytes']
+                    background_img = Image.open(io.BytesIO(bg_bytes))
+                    background_img = background_img.convert('RGBA').resize((width, height), Image.LANCZOS if hasattr(Image, 'LANCZOS') else Image.ANTIALIAS)
+                    logger.info("Фоновое изображение обработано из bytes")
+                except Exception as e:
+                    logger.warning(f"Ошибка обработки фонового изображения из bytes: {e}")
+            elif template_data.get('background_image_url'):
+                try:
+                    bg_path = Path(template_data['background_image_url'])
+                    if bg_path.exists():
+                        background_img = Image.open(bg_path).convert('RGBA')
+                        background_img = background_img.resize((width, height), Image.LANCZOS if hasattr(Image, 'LANCZOS') else Image.ANTIALIAS)
+                        logger.info("Фоновое изображение обработано из URL/пути")
+                except Exception as e:
+                    logger.warning(f"Ошибка загрузки фонового изображения: {e}")
+
+            # Наложение фонового изображения на градиент
+            if background_img:
+                img.paste(gradient_bg, (0, 0))
+                img.paste(background_img, (0, 0))
+
+                # Создание темного оверлея для читаемости текста (40% opacity)
+                overlay = Image.new('RGBA', (width, height), (0, 0, 0, 102))
+                img = Image.alpha_composite(img, overlay)
             else:
-                # Обычный текст - собираем до следующего маркера
-                chunk = ""
-                while i < len(text) and text[i:i+2] != '**' and text[i] != '*':
-                    chunk += text[i]
-                    i += 1
-                if chunk:
-                    tokens.append((chunk, False, False))  # regular
+                img.paste(gradient_bg, (0, 0))
 
-        # Теперь переносим по ширине и сохраняем форматирование
-        formatted_tokens = []
-        current_line_tokens = []
-        current_width = 0
+            draw = ImageDraw.Draw(img)
 
-        for token_text, is_bold, is_italic in tokens:
-            # Разбиваем токен на слова
-            words = token_text.split()
+            # 2. Основная карточка (центрированная белая область)
+            card_width = int(width * 0.9)   # 90% ширины
+            card_height = int(height * 0.9) # 90% высоты
+            card_x = (width - card_width) // 2
+            card_y = (height - card_height) // 2
 
-            for word in words:
-                # Проверяем ширину слова
-                font = self._get_font(base_font.size, is_bold) if is_bold else base_font
-                word_bbox = font.getbbox(word)
-                word_width = word_bbox[2] - word_bbox[0]
+            # Рисование закругленного прямоугольника (белый с тенью)
+            card_bg = Image.new('RGBA', (card_width, card_height), (255, 255, 255, 230))
+            # Простая тень
+            shadow = Image.new('RGBA', (card_width + 4, card_height + 4), (0, 0, 0, 50))
+            img.paste(shadow, (card_x - 2, card_y - 2), shadow)
+            img.paste(card_bg, (card_x, card_y), card_bg)
 
-                # Проверяем помещается ли слово в текущую строку
-                if current_width + word_width <= max_width or not current_line_tokens:
-                    current_line_tokens.append((word, is_bold, is_italic))
-                    current_width += word_width + 6  # + отступ между словами
-                else:
-                    # Переходим на новую строку
-                    if current_line_tokens:
-                        formatted_tokens.extend(current_line_tokens)
-                        formatted_tokens.append(('\n', False, False))  # маркер новой строки
+            # Рабочая область - внутри карточки с отступами
+            content_x = card_x + 50
+            content_y = card_y + 40
+            content_width = card_width - 100
+            content_height = card_height - 80
 
-                    current_line_tokens = [(word, is_bold, is_italic)]
-                    current_width = word_width
+            current_y = content_y
 
-        # Добавляем последнюю строку
-        if current_line_tokens:
-            formatted_tokens.extend(current_line_tokens)
+            # 3. ЗАГОЛОВОК
+            if template_data.get('title'):
+                title_font = self._get_font(48, bold=True)
+                title_lines = self._wrap_text(template_data['title'], title_font, content_width)
+                title_color = self._hex_to_rgb(template_data['primary_color'])
 
-        return formatted_tokens
+                self._draw_multiline_text(
+                    draw, title_lines,
+                    (content_x, current_y),
+                    title_font, title_color
+                )
+
+                bbox = title_font.getbbox("Ag")
+                title_height = (title_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 10)
+                current_y += title_height + 15
+
+            # 4. ПОДЗАГОЛОВОК
+            if template_data.get('subtitle'):
+                subtitle_font = self._get_font(28)
+                subtitle_lines = self._wrap_text(template_data['subtitle'], subtitle_font, content_width)
+                subtitle_color = (120, 120, 120)
+
+                self._draw_multiline_text(
+                    draw, subtitle_lines,
+                    (content_x, current_y),
+                    subtitle_font, subtitle_color
+                )
+
+                bbox = subtitle_font.getbbox("Ag")
+                subtitle_height = (subtitle_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 8)
+                current_y += subtitle_height + 25
+
+            # 5. ОСНОВНОЙ КОНТЕНТ с поддержкой Markdown
+            if template_data.get('content'):
+                content_font = self._get_font(24)
+                content_lines = self._format_markdown_text(template_data['content'], content_font, content_width)
+                content_color = self._hex_to_rgb(template_data['text_color'])
+
+                self._draw_formatted_multiline_text(
+                    draw, content_lines,
+                    (content_x, current_y),
+                    content_font, content_color
+                )
+
+                content_height = len(content_lines) * (content_font.getbbox("Ag")[3] - content_font.getbbox("Ag")[1] + 8)
+                current_y += content_height + 35
+
+            # 6. СТАТИСТИКА (сетка)
+            stats = template_data.get('stats', [])
+            if stats:
+                stat_card_width = min(200, content_width // 2 - 10)
+                stat_card_height = 80
+
+                # Вычисление сетки
+                items_per_row = max(1, content_width // (stat_card_width + 10))
+                current_stat_x = content_x
+
+                for i, stat in enumerate(stats[:6]):  # Максимум 6 элементов
+                    if i > 0 and i % items_per_row == 0:
+                        current_stat_x = content_x
+                        current_y += stat_card_height + 10
+
+                    # Карточка статистики
+                    stat_bg = Image.new('RGBA', (stat_card_width, stat_card_height),
+                                      (248, 249, 250, 200))
+                    img.paste(stat_bg, (current_stat_x, current_y), stat_bg)
+
+                    # Число
+                    number_font = self._get_font(48, bold=True)
+                    number_color = self._hex_to_rgb(template_data['primary_color'])
+                    number_bbox = number_font.getbbox(stat.get('number', '0'))
+                    number_x = current_stat_x + stat_card_width // 2 - (number_bbox[2] - number_bbox[0]) // 2
+                    number_y = current_y + 10
+                    draw.text((number_x, number_y), str(stat.get('number', '0')),
+                            font=number_font, fill=number_color)
+
+                    # Лейбл
+                    label_font = self._get_font(18)
+                    label_text = self._wrap_text(stat.get('label', ''), label_font, stat_card_width - 10)
+                    label_x = current_stat_x + stat_card_width // 2
+                    label_y = current_y + 55
+                    self._draw_multiline_text(
+                        draw, label_text, (label_x, label_y),
+                        label_font, (102, 102, 102), anchor="mt"
+                    )
+
+                    current_stat_x += stat_card_width + 10
+
+                current_y += stat_card_height + 20
+
+            # 7. CTA КНОПКА
+            if template_data.get('cta_text'):
+                button_width = 300
+                button_height = 50
+                button_x = content_x + (content_width - button_width) // 2
+                button_y = current_y
+
+                # Кнопка с градиентом
+                button_gradient = self._create_gradient_background(
+                    button_width, button_height,
+                    template_data['primary_color'],
+                    template_data['secondary_color']
+                )
+
+                # Закругленные углы
+                mask = Image.new('L', (button_width, button_height), 0)
+                mask_draw = ImageDraw.Draw(mask)
+                mask_draw.rounded_rectangle([(0, 0), (button_width, button_height)], 25, fill=255)
+                button_img = Image.new('RGBA', (button_width, button_height))
+                button_img.paste(button_gradient, (0, 0))
+                img.paste(button_img, (button_x, button_y), mask)
+
+                # Текст кнопки
+                button_font = self._get_font(20, bold=True)
+                bbox = button_font.getbbox(template_data['cta_text'])
+                text_width = bbox[2] - bbox[0]
+                text_x = button_x + button_width // 2 - text_width // 2
+                text_y = button_y + button_height // 2 - (bbox[3] - bbox[1]) // 2 + 2
+
+                draw.text((text_x, text_y), template_data['cta_text'],
+                        font=button_font, fill=(255, 255, 255))
+
+                current_y += button_height + 20
+
+            # 8. FOOTER
+            footer_font = self._get_font(20)
+            footer_color = self._hex_to_rgb(template_data['primary_color'])
+            footer_text = template_data.get('org_name', 'НКО')
+            if template_data.get('contact_info'):
+                footer_text += f" • {template_data['contact_info']}"
+
+            footer_lines = self._wrap_text(footer_text, footer_font, content_width)
+
+            # Позиция футера - внизу карточки
+            bbox = footer_font.getbbox("Ag")
+            footer_height = (footer_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 4)
+            footer_y = card_y + card_height - footer_height - 15
+
+            footer_x = content_x + content_width // 2
+            self._draw_multiline_text(
+                draw, footer_lines, (footer_x, footer_y),
+                footer_font, footer_color, anchor="mt"
+            )
+
+            # Конвертирование в bytes
+            from io import BytesIO
+            output = BytesIO()
+            img.save(output, format='PNG')
+            card_bytes = output.getvalue()
+
+            logger.info(f"Карточка PIL успешно сгенерирована: {len(card_bytes)} байт")
+            return card_bytes
+
+        except Exception as e:
+            logger.error(f"Ошибка генерации PIL-карточки '{template_name}': {e}")
+            raise
 
     def _draw_multiline_text(self, draw: ImageDraw.ImageDraw, text: str, position: Tuple[int, int],
                            font: ImageFont.FreeTypeFont, fill: Tuple[int, int, int],
                            anchor: str = "lt", align: str = "left"):
-        """Отрисовка многострочного текста."""
+        """
+        Отрисовка многострочного текста.
+        
+        Args:
+            draw (ImageDraw.ImageDraw): Объект для рисования
+            text (str): Текст для отрисовки
+            position (Tuple[int, int]): Позиция текста
+            font (ImageFont.FreeTypeFont): Шрифт текста
+            fill (Tuple[int, int, int]): Цвет текста
+            anchor (str): Якорь позиционирования ('lt', 'mt', 'mm')
+            align (str): Выравнивание текста
+        """
         if not text:
             return
 
         x, y = position
         lines = text.split('\n')
-        line_height = font.getbbox("Ag")[3] - font.getbbox("Ag")[1] + 4  # Высота линии
+        line_height = font.getbbox("Ag")[3] - font.getbbox("Ag")[1] + 4
 
         for line in lines:
             if not line.strip():
@@ -521,27 +821,34 @@ class PILCardGenerator(BaseCardGenerator):
             y += line_height
 
     def _format_markdown_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[Tuple[str, bool, bool]]:
-        """Парсинг простого Markdown текста и форматирование с переносами.
-
+        """
+        Парсинг простого Markdown текста и форматирование с переносами.
+        
         Поддерживает:
         - **bold** текст
-        - *italic* текст (пока не реализовано в PIL, но можно добавить курсивный шрифт)
-
-        Возвращает список кортежей: (text_chunk, is_bold, is_italic)
+        - *italic* текст (пока не реализовано в PIL)
+        
+        Args:
+            text (str): Исходный текст с markdown
+            font (ImageFont.FreeTypeFont): Базовый шрифт
+            max_width (int): Максимальная ширина строки
+            
+        Returns:
+            List[Tuple[str, bool, bool]]: Список кортежей (текст, жирный, курсив)
         """
         if not text:
             return []
 
-        # Удаляем старые маркеры форматирования рекурсивно
+        # Удаление старых маркеров форматирования
         text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\*\*\1\*', text)  # ***text*** -> **text*
         text = re.sub(r'___(.+?)___', r'\*\*\1\*', text)        # ___text___ -> **text*
 
-        # Разбиваем на токены по правилам markdown
+        # Разбиение на токены по правилам markdown
         tokens = []
         i = 0
         while i < len(text):
             if text[i:i+2] == '**':
-                # Найдем конец bold текста
+                # Поиск конца bold текста
                 end = text.find('**', i+2)
                 if end != -1:
                     bold_text = text[i+2:end]
@@ -549,59 +856,52 @@ class PILCardGenerator(BaseCardGenerator):
                         tokens.append((bold_text, True, False))  # bold
                     i = end + 2
                 else:
-                    # Не найден закрывающий маркер, добавляем как обычный текст
                     tokens.append((text[i], False, False))
                     i += 1
             elif text[i] == '*':
-                # Найдем конец italic текста
+                # Поиск конца italic текста
                 end = text.find('*', i+1)
                 if end != -1:
                     italic_text = text[i+1:end]
                     if italic_text:
-                        tokens.append((italic_text, False, True))  # italic (пока без курсива)
+                        tokens.append((italic_text, False, True))  # italic
                     i = end + 1
                 else:
-                    # Не найден закрывающий маркер, добавляем как обычный текст
                     tokens.append((text[i], False, False))
                     i += 1
             else:
-                # Обычный текст - собираем до следующего маркера
+                # Обычный текст
                 chunk = ""
                 while i < len(text) and text[i:i+2] != '**' and text[i] != '*':
                     chunk += text[i]
                     i += 1
                 if chunk:
-                    tokens.append((chunk, False, False))  # regular
+                    tokens.append((chunk, False, False))
 
-        # Теперь переносим по ширине и сохраняем форматирование
+        # Перенос по ширине с сохранением форматирования
         formatted_lines = []
         current_line = []
         current_width = 0
 
         for token_text, is_bold, is_italic in tokens:
-            # Разбиваем токен на слова
             words = token_text.split()
 
             for word in words:
-                # Проверяем ширину слова
-                test_font = self._get_font(font.size, is_bold)  # Используем bold шрифт если нужно
+                test_font = self._get_font(font.size, is_bold)
                 word_bbox = test_font.getbbox(word)
                 word_width = word_bbox[2] - word_bbox[0]
 
-                # Проверяем помещается ли слово в текущую строку
                 if current_width + word_width <= max_width or not current_line:
                     current_line.append((word, is_bold, is_italic))
-                    current_width += word_width + 4  # + отступ между словами
+                    current_width += word_width + 4
                 else:
-                    # Переходим на новую строку
                     if current_line:
                         formatted_lines.extend(current_line)
-                        formatted_lines.append(('\n', False, False))  # маркер новой строки
+                        formatted_lines.append(('\n', False, False))
 
                     current_line = [(word, is_bold, is_italic)]
                     current_width = word_width
 
-        # Добавляем последнюю строку
         if current_line:
             formatted_lines.extend(current_line)
 
@@ -612,7 +912,16 @@ class PILCardGenerator(BaseCardGenerator):
                                      position: Tuple[int, int],
                                      base_font: ImageFont.FreeTypeFont,
                                      base_color: Tuple[int, int, int]):
-        """Отрисовка форматированного текста с поддержкой bold/italic."""
+        """
+        Отрисовка форматированного текста с поддержкой bold/italic.
+        
+        Args:
+            draw (ImageDraw.ImageDraw): Объект для рисования
+            formatted_tokens (List[Tuple[str, bool, bool]]): Форматированные токены
+            position (Tuple[int, int]): Позиция для отрисовки
+            base_font (ImageFont.FreeTypeFont): Базовый шрифт
+            base_color (Tuple[int, int, int]): Базовый цвет
+        """
         x, y = position
         line_height = base_font.getbbox("Ag")[3] - base_font.getbbox("Ag")[1] + 6
 
@@ -625,714 +934,34 @@ class PILCardGenerator(BaseCardGenerator):
                 y += line_height
                 continue
 
-            # Выбираем шрифт
+            # Выбор шрифта
             font = self._get_font(base_font.size, is_bold)
 
-            # Рисуем токен
+            # Отрисовка токена
             draw.text((current_x, y), token_text, font=font, fill=base_color)
 
-            # Сдвигаем позицию
+            # Сдвиг позиции
             bbox = font.getbbox(token_text)
-            current_x += bbox[2] - bbox[0] + 4  # + отступ между словами
-
-    def _create_telegram_gradient(self, width, height, color1, color2):
-        """Создает горизонтальный градиент для Telegram-карточек."""
-        base = Image.new('RGB', (width, height), color1)
-        top = Image.new('RGB', (width, height), color2)
-        mask = Image.new('L', (width, height))
-        mask_data = []
-        for y in range(height):
-            mask_data.extend([int(255 * (x / width)) for x in range(width)])
-        mask.putdata(mask_data)
-        base.paste(top, (0, 0), mask)
-        return base
-
-    def _draw_telegram_icon(self, draw, icon_type, x, y, size, color):
-        """Рисует схематичные иконки для Telegram."""
-        if icon_type == 'building':  # Иконка НКО
-            draw.rectangle([x, y + size*0.2, x + size, y + size], fill=color)
-            # Окна
-            w_size = size * 0.2
-            for i in range(2):
-                for j in range(2):
-                    draw.rectangle([x + size*0.2 + i*w_size*1.5, y + size*0.4 + j*w_size*1.5,
-                                    x + size*0.2 + i*w_size*1.5 + w_size, y + size*0.4 + j*w_size*1.5 + w_size], fill=(255,255,255))
-
-        elif icon_type == 'pin':  # Иконка локации
-            cx, cy = x + size/2, y + size/3
-            r = size/2.5
-            draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=color)
-            draw.polygon([cx, cy+r, cx-r/2, cy, cx+r/2, cy], fill=color)  # Ножка
-            draw.polygon([cx, y+size, cx-2, cy+r/2, cx+2, cy+r/2], fill=color)  # Острие
-            draw.ellipse([cx-r/3, cy-r/3, cx+r/3, cy+r/3], fill=(255,255,255))  # Точка внутри
-
-        elif icon_type == 'people':  # Иконка аудитории
-            # Человек 1
-            draw.ellipse([x, y, x + size/3, y + size/3], fill=color)  # Голова
-            draw.pieslice([x - size/6, y + size/3, x + size/2, y + size], 270, 90, fill=color)
-            # Человек 2
-            draw.ellipse([x + size/2, y, x + size/2 + size/3, y + size/3], fill=color)
-            draw.pieslice([x + size/3, y + size/3, x + size, y + size], 270, 90, fill=color)
-
-        elif icon_type == 'datetime':  # Иконка даты и времени
-            # Рисуем календарь
-            draw.rectangle([x, y, x + size, y + size], outline=color, width=2)
-            # Верхняя полоса календаря
-            draw.rectangle([x, y, x + size, y + size*0.3], fill=color)
-            # Точки на верхней полосе (дни недели)
-            dot_size = size * 0.05
-            for i in range(7):
-                dot_x = x + size*0.1 + i * size*0.12
-                dot_y = y + size*0.15
-                draw.ellipse([dot_x, dot_y, dot_x + dot_size, dot_y + dot_size], fill=(255,255,255))
-
-    def _draw_telegram_pill(self, img, x, y, text, icon_type, font, text_color=(0,0,0), bg_color=(255,255,255)):
-        """Рисует скругленную плашку с иконкой и текстом для Telegram."""
-        draw = ImageDraw.Draw(img)
-
-        # Отступы
-        padding_x = 20
-        padding_y = 10
-        icon_size = 30
-        icon_padding = 10
-
-        # Считаем размеры текста
-        bbox = font.getbbox(text)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-
-        # Полная ширина и высота плашки
-        full_w = padding_x * 2 + icon_size + icon_padding + text_w
-        full_h = padding_y * 2 + text_h + 10  # +10 для запаса на высоту шрифта
-
-        # Рисуем скругленный прямоугольник (фон)
-        shape = [(x, y), (x + full_w, y + full_h)]
-        draw.rounded_rectangle(shape, radius=full_h//2, fill=bg_color)
-
-        # Рисуем иконку
-        icon_x = x + padding_x
-        icon_y = y + (full_h - icon_size) // 2
-        self._draw_telegram_icon(draw, icon_type, icon_x, icon_y, icon_size, text_color)
-
-        # Рисуем текст
-        text_x = icon_x + icon_size + icon_padding
-        text_y = y + (full_h - text_h) // 2 - 5  # -5 небольшая коррекция базовой линии
-        draw.text((text_x, text_y), text, font=font, fill=text_color)
-
-        return y + full_h + 15  # Возвращаем Y координату для следующего элемента (+ отступ)
-
-    def _format_telegram_datetime(self, event_datetime):
-        """Форматирует дату и время в читаемый формат для Telegram: '15 декабря 2025, 14:00'"""
-        from datetime import datetime
-
-        # Названия месяцев на русском
-        months_ru = {
-            1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня",
-            7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
-        }
-
-        try:
-            # Пробуем разные форматы входной даты
-            formats = [
-                "%Y-%m-%d %H:%M:%S",  # 2025-12-15 14:00:00
-                "%Y-%m-%d %H:%M",     # 2025-12-15 14:00
-                "%d.%m.%Y %H:%M",     # 15.12.2025 14:00
-                "%d.%m.%Y %H:%M:%S",  # 15.12.2025 14:00:00
-            ]
-
-            dt = None
-            for fmt in formats:
-                try:
-                    dt = datetime.strptime(event_datetime, fmt)
-                    break
-                except ValueError:
-                    continue
-
-            if dt is None:
-                return event_datetime
-
-            day = dt.day
-            month_name = months_ru[dt.month]
-            year = dt.year
-            time_str = dt.strftime("%H:%M")
-
-            return f"{day} {month_name} {year}, {time_str}"
-
-        except Exception as e:
-            logger.warning(f"Ошибка форматирования даты '{event_datetime}': {e}")
-            return event_datetime
-
-
-
-    def _load_telegram_fonts(self):
-        """Загрузка шрифтов для Telegram-карточек."""
-        font_paths = {
-            "arialbd.ttf": None,  # Arial Bold
-            "arial.ttf": None,    # Arial Regular
-            "DejaVuSans-Bold.ttf": None,
-            "LiberationSans-Bold.ttf": None,
-            "FreeSansBold.ttf": None,
-            "DejaVuSans.ttf": None,
-            "LiberationSans-Regular.ttf": None,
-            "FreeSans.ttf": None
-        }
-
-        # Стандартные пути к шрифтам в Linux
-        font_dirs = [
-            "/usr/share/fonts",
-            "/usr/share/fonts/truetype",
-            "/usr/share/fonts/truetype/dejavu",
-            "/usr/share/fonts/truetype/liberation",
-            "/usr/share/fonts/truetype/freefont"
-        ]
-
-        # Ищем доступные шрифты
-        for name in font_paths.keys():
-            for folder in font_dirs:
-                path = os.path.join(folder, name)
-                if os.path.exists(path):
-                    font_paths[name] = path
-                    break
-
-        logger.info(f"Telegram-шрифты загружены: {len([p for p in font_paths.values() if p])} найдено")
-        return font_paths
-
-    def _get_telegram_font(self, font_names, size, font_paths):
-        """Перебирает список шрифтов для Telegram-карточек и загружает первый найденный."""
-        for name in font_names:
-            # 1. Пробуем загрузить просто по имени
-            try:
-                font = ImageFont.truetype(name, size)
-                return font
-            except OSError:
-                # 2. Пробуем найти в путях
-                if font_paths.get(name) and os.path.exists(font_paths[name]):
-                    font = ImageFont.truetype(font_paths[name], size)
-                    return font
-
-        # Если ничего не нашли, возвращаем дефолтный
-        logger.warning(f"Telegram-шрифты {font_names} не найдены. Используется стандартный.")
-        return ImageFont.load_default()
-
-    async def _render_telegram_card(self, data: Dict, size: Tuple[int, int]) -> bytes:
-        """Генерация продвинутой карточки для Telegram с адаптивным размещением контента."""
-        try:
-            width, height = size
-
-            logger.info(f"Генерация Telegram-карточки: размер {width}x{height}")
-
-            # Извлекаем параметры
-            ngo_name = data.get('org_name', 'НКО')
-            event_datetime = data.get('event_date', '')
-            location = data.get('event_place', '')
-            audience = data.get('event_audience', '')
-            title = data.get('title', '')
-            body_text = data.get('content', '')
-            image_data = data.get('background_image_bytes')
-
-            # Загрузка шрифтов для Telegram
-            font_paths = self._load_telegram_fonts()
-
-            try:
-                font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 80, font_paths)
-                font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 40, font_paths)
-                font_pill = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 30, font_paths)
-                font_npo = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 30, font_paths)
-            except Exception as e:
-                logger.warning(f"Ошибка загрузки Telegram-шрифтов: {e}. Используем стандартные.")
-                font_title = font_body = font_pill = font_npo = ImageFont.load_default()
-
-            # Цвета градиента для Telegram
-            grad_color_1 = (225, 70, 220)  # Маджента/Розовый (слева)
-            grad_color_2 = (255, 220, 160)  # Персиковый/Желтый (справа)
-
-            content_margin_left = 60
-            content_margin_right = 60
-            content_width = width - content_margin_left - content_margin_right
-
-            # Более точный расчет высоты контента
-            estimated_content_height = 0
-
-            # Расчет высоты заголовка
-            if title:
-                title_text = title.upper()
-                title_lines = self._safe_wrap_text(title_text, font_title, content_width)
-                title_line_height = font_title.getbbox("Hg")[3] - font_title.getbbox("Hg")[1] + 15
-                # Точные строки с переносами
-                title_lines_count = len(title_lines) if title_lines else 1
-                estimated_content_height += title_lines_count * title_line_height
-
-            # Расчет высоты основного текста
-            if body_text:
-                formatted_tokens = self._format_markdown_text_telegram(body_text, font_body, content_width)
-                body_line_height = font_body.getbbox("Ag")[3] - font_body.getbbox("Ag")[1] + 10
-
-                # Подсчет количества строк с учетом переносов
-                current_x = 0
-                line_count = 1
-                for token_text, is_bold, is_italic in formatted_tokens:
-                    if token_text == '\n':
-                        line_count += 1
-                        current_x = 0
-                        continue
-
-                    font = self._get_font(font_body.size, is_bold)
-                    token_bbox = font.getbbox(token_text)
-                    token_width = token_bbox[2] - token_bbox[0]
-
-                    if current_x + token_width > content_width:
-                        line_count += 1
-                        current_x = token_width
-                    else:
-                        current_x += token_width + 6
-
-                estimated_content_height += line_count * body_line_height + 20
-
-            # Расчет высоты плашек
-            if location:
-                estimated_content_height += 70  # Увеличил для запаса
-            if audience:
-                estimated_content_height += 70
-
-            # Резервные отступы и пространство для ошибок расчета
-            estimated_content_height += 120  # Увеличил с 100
-
-            # Определяем размер изображения адаптивно с учетом ограничений
-            min_image_height = int(height * 0.2)  # Снижаем минимум для большего пространства под текст
-            max_image_height = int(height * 0.6)  # Снижаем максимум для большего пространства под текст
-            available_space_for_gradient = height - 120  # Увеличиваем отступ
-
-            required_content_space = estimated_content_height + 80  # Увеличиваем требуемое пространство
-
-            # Добавляем более агрессивную логику для больших размеров
-            if height > 1200:  # Для очень больших изображений (как Telegram)
-                min_image_height = int(height * 0.15)  # Еще меньше минимум
-                max_image_height = int(height * 0.5)   # Еще меньше максимум
-
-            min_required_space = min_image_height + required_content_space
-            max_available_space = height - 80  # Минимальные отступы
-
-            if min_required_space > max_available_space:
-                # Контент слишком большой, уменьшаем изображение до минимума + корректировка шрифтов
-                split_y = min_image_height
-                logger.warning(f"Контент слишком большой для размера {width}x{height}. Изображение будет сильно уменьшено. Уменьшаем шрифты.")
-
-                # Уменьшаем шрифты для лучшей вместимости
-                if height > 1200:
-                    font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 60, font_paths)
-                    font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 32, font_paths)
-                    font_pill = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 24, font_paths)
-                    font_npo = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 24, font_paths)
-                elif height > 1000:
-                    font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 70, font_paths)
-                    font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 35, font_paths)
-                    font_pill = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 26, font_paths)
-                    font_npo = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 26, font_paths)
-            elif required_content_space > available_space_for_gradient - min_image_height:
-                # Уменьшаем изображение пропорционально
-                split_y = max(min_image_height, available_space_for_gradient - required_content_space)
-
-                # Для средних случаев уменьшаем шрифты немного
-                if height > 1200 and required_content_space > available_space_for_gradient * 0.7:
-                    font_title = self._get_telegram_font(["arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf", "FreeSansBold.ttf"], 75, font_paths)
-                    font_body = self._get_telegram_font(["arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"], 37, font_paths)
-            else:
-                # Используем максимальный размер изображения
-                split_y = max_image_height
-
-            logger.info(f"Telegram-расчет: content_height={estimated_content_height}, split_y={split_y}")
-
-            # Создаем изображение
-            img = Image.new('RGB', (width, height), (255, 255, 255))
-
-            # Загружаем пользовательскую картинку
-            if image_data:
-                try:
-                    if isinstance(image_data, bytes):
-                        user_img = Image.open(io.BytesIO(image_data))
-                    else:
-                        user_img = Image.open(image_data)
-                    user_img = user_img.convert('RGB')
-                    user_img = ImageOps.fit(user_img, (width, split_y), method=Image.LANCZOS)
-                    img.paste(user_img, (0, 0))
-                except Exception as e:
-                    logger.warning(f"Ошибка загрузки картинки для Telegram: {e}")
-
-            # Создаем градиент для нижней части
-            gradient_h = height - split_y
-            gradient_img = self._create_telegram_gradient(width, gradient_h, grad_color_1, grad_color_2)
-            img.paste(gradient_img, (0, split_y))
-
-            draw = ImageDraw.Draw(img)
-
-            # Координаты контента
-            current_y = split_y + 60
-
-            # ЗАГОЛОВОК - убран по требованию пользователя
-            # (Заголовок не отображается на Telegram карточках)
-
-            # ОСНОВНОЙ ТЕКСТ с поддержкой Markdown
-            if body_text:
-                current_y += 20
-                remaining_height = height - current_y - 120
-                max_body_lines = max(1, int(remaining_height / (font_body.getbbox("Hg")[3] - font_body.getbbox("Hg")[1] + 10)))
-
-                # Используем новую функцию обработки Markdown для Telegram
-                formatted_tokens = self._format_markdown_text_telegram(body_text, font_body, content_width)
-
-                # Рисуем форматированный текст
-                current_x = content_margin_left
-                line_start_y = current_y
-                token_index = 0
-
-                while token_index < len(formatted_tokens) and current_y < height - 120:
-                    token_text, is_bold, is_italic = formatted_tokens[token_index]
-
-                    if token_text == '\n':
-                        # Новая строка
-                        current_x = content_margin_left
-                        current_y += font_body.getbbox("Ag")[3] - font_body.getbbox("Ag")[1] + 10
-                        token_index += 1
-                        continue
-
-                    # Выбираем шрифт
-                    font = self._get_font(font_body.size, is_bold)
-
-                    # Проверяем, поместится ли токен в текущей строке
-                    token_bbox = font.getbbox(token_text)
-                    token_width = token_bbox[2] - token_bbox[0]
-
-                    if current_x + token_width > content_margin_left + content_width:
-                        # Перенос на новую строку
-                        current_x = content_margin_left
-                        current_y += font_body.getbbox("Ag")[3] - font_body.getbbox("Ag")[1] + 10
-
-                        # Проверяем, не выйдем ли за пределы высоты
-                        if current_y >= height - 120:
-                            break
-
-                    # Рисуем токен
-                    draw.text((current_x, current_y), token_text, font=font, fill=(255, 255, 255))
-
-                    # Сдвигаем позицию
-                    current_x += token_width + 6  # + отступ между словами
-                    token_index += 1
-
-                # Если не все токены были отрисованы, добавляем "..."
-                if token_index < len(formatted_tokens):
-                    draw.text((content_margin_left, current_y + 50), "...", font=font_body, fill=(255, 255, 255))
-
-            current_y += 50  # Увеличил отступ после текста для предотвращения наложения
-
-            # ПЛАШКИ
-            available_height_for_pills = height - current_y - 20
-
-            # Рисуем плашки в центре по горизонтали, а не слева
-            pill_start_x = (width - 400) // 2  # Центрируем плашки (примерная ширина 400px)
-
-            if location and available_height_for_pills > 60:
-                next_y = self._draw_telegram_pill(img, pill_start_x, current_y, location, 'pin', font_pill)
-                current_y = next_y
-                available_height_for_pills -= 60
-
-            if audience and available_height_for_pills > 60:
-                next_y = self._draw_telegram_pill(img, pill_start_x, current_y, f"Для: {audience}", 'people', font_pill)
-                current_y = next_y
-
-            # ВЕРХНИЕ ПЛАШКИ
-            self._draw_telegram_pill(img, 40, 40, f"НКО «{ngo_name}»", 'building', font_npo)
-
-            if event_datetime:
-                formatted_datetime = self._format_telegram_datetime(event_datetime)
-                padding_x = 20
-                icon_size = 30
-                icon_padding = 10
-                bbox = font_npo.getbbox(formatted_datetime)
-                text_w = bbox[2] - bbox[0]
-                pill_width = padding_x * 2 + icon_size + icon_padding + text_w
-                date_x = width - pill_width - 40
-                self._draw_telegram_pill(img, date_x, 40, formatted_datetime, 'datetime', font_npo)
-
-            # Конвертируем в bytes
-            from io import BytesIO
-            output = BytesIO()
-            img.save(output, format='PNG')
-            card_bytes = output.getvalue()
-
-            logger.info(f"Telegram-карточка успешно сгенерирована: {len(card_bytes)} байт")
-            return card_bytes
-
-        except Exception as e:
-            logger.error(f"Ошибка генерации Telegram-карточки: {e}")
-            raise
-
-    async def render_card(
-        self,
-        template_name: str,
-        data: Dict,
-        size: Tuple[int, int],
-    ) -> bytes:
-        """
-        Генерация карточки с помощью Pillow.
-        """
-        # Проверяем, является ли это запросом на генерацию Telegram-карточки
-        if template_name == 'telegram_post':
-            return await self._render_telegram_card(data, size)
-
-        # Стандартная генерация PIL-карточки
-        try:
-            width, height = size
-
-            # Получаем данные с значениями по умолчанию
-            defaults = {
-                'title': 'Контент от НКО',
-                'subtitle': '',
-                'content': '',
-                'footer': 'НКО',
-                'primary_color': '#667eea',
-                'secondary_color': '#764ba2',
-                'text_color': '#333',
-                'background_color': '#f5f7fa',
-                'org_name': 'НКО',
-                'contact_info': '',
-                'stats': [],
-                'cta_text': '',
-                'cta_link': '#'
-            }
-
-            template_data = {**defaults, **data}
-
-            logger.info(f"Генерация карточки PIL: {template_name}, размер {width}x{height}")
-
-            # Создаем основное изображение
-            img = Image.new('RGBA', (width, height), (255, 255, 255, 0))
-            draw = ImageDraw.Draw(img)
-
-            # 1. ФОН - Градиент или фоновое изображение
-            gradient_bg = self._create_gradient_background(
-                width, height,
-                template_data['primary_color'],
-                template_data['secondary_color']
-            )
-
-            # Проверяем сначала background_image_bytes, потом background_image_url
-            background_img = None
-            if template_data.get('background_image_bytes'):
-                try:
-                    bg_bytes = template_data['background_image_bytes']
-                    background_img = Image.open(io.BytesIO(bg_bytes))
-                    background_img = background_img.convert('RGBA').resize((width, height), Image.LANCZOS if hasattr(Image, 'LANCZOS') else Image.ANTIALIAS)
-                    logger.info("Фоновое изображение обработано из bytes")
-                except Exception as e:
-                    logger.warning(f"Ошибка обработки фонового изображения из bytes: {e}")
-            elif template_data.get('background_image_url'):
-                try:
-                    bg_path = Path(template_data['background_image_url'])
-                    if bg_path.exists():
-                        background_img = Image.open(bg_path).convert('RGBA')
-                        background_img = background_img.resize((width, height), Image.LANCZOS if hasattr(Image, 'LANCZOS') else Image.ANTIALIAS)
-                        logger.info("Фоновое изображение обработано из URL/пути")
-                except Exception as e:
-                    logger.warning(f"Ошибка загрузки фонового изображения: {e}")
-
-            # Накладываем фоновое изображение на градиент, если оно есть
-            if background_img:
-                # Накладываем фоновое изображение
-                img.paste(gradient_bg, (0, 0))
-                img.paste(background_img, (0, 0))
-
-                # Создаем темный оверлей для читаемости текста (40% opacity)
-                overlay = Image.new('RGBA', (width, height), (0, 0, 0, 102))
-                img = Image.alpha_composite(img, overlay)
-            else:
-                # Просто градиентный фон без изображения
-                img.paste(gradient_bg, (0, 0))
-
-            draw = ImageDraw.Draw(img)
-
-            # 2. Основная карточка (центрированная белая область)
-            card_width = int(width * 0.9)   # 90% ширины
-            card_height = int(height * 0.9) # 90% высоты
-            card_x = (width - card_width) // 2
-            card_y = (height - card_height) // 2
-
-            # Рисуем закругленный прямоугольник (белый с тенью)
-            card_bg = Image.new('RGBA', (card_width, card_height), (255, 255, 255, 230))
-            # Простая тень
-            shadow = Image.new('RGBA', (card_width + 4, card_height + 4), (0, 0, 0, 50))
-            img.paste(shadow, (card_x - 2, card_y - 2), shadow)
-            img.paste(card_bg, (card_x, card_y), card_bg)
-
-            # Рабочая область - внутри карточки с отступами
-            content_x = card_x + 50
-            content_y = card_y + 40
-            content_width = card_width - 100
-            content_height = card_height - 80
-
-            current_y = content_y
-
-            # 4. ЗАГОЛОВОК
-            if template_data.get('title'):
-                title_font = self._get_font(48, bold=True)  # Увеличен размер
-                title_lines = self._wrap_text(template_data['title'], title_font, content_width)
-                title_color = self._hex_to_rgb(template_data['primary_color'])
-
-                self._draw_multiline_text(
-                    draw, title_lines,
-                    (content_x, current_y),
-                    title_font, title_color
-                )
-
-                bbox = title_font.getbbox("Ag")
-                title_height = (title_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 10)
-                current_y += title_height + 15
-
-            # 5. ПОДЗАГОЛОВОК
-            if template_data.get('subtitle'):
-                subtitle_font = self._get_font(28)  # Увеличен размер
-                subtitle_lines = self._wrap_text(template_data['subtitle'], subtitle_font, content_width)
-                subtitle_color = (120, 120, 120)  # Более светлый серый
-
-                self._draw_multiline_text(
-                    draw, subtitle_lines,
-                    (content_x, current_y),
-                    subtitle_font, subtitle_color
-                )
-
-                bbox = subtitle_font.getbbox("Ag")
-                subtitle_height = (subtitle_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 8)
-                current_y += subtitle_height + 25
-
-            # 6. ОСНОВНОЙ КОНТЕНТ с поддержкой Markdown
-            if template_data.get('content'):
-                content_font = self._get_font(24)  # Увеличен размер
-                content_lines = self._format_markdown_text(template_data['content'], content_font, content_width)
-                content_color = self._hex_to_rgb(template_data['text_color'])
-
-                self._draw_formatted_multiline_text(
-                    draw, content_lines,
-                    (content_x, current_y),
-                    content_font, content_color
-                )
-
-                content_height = len(content_lines) * (content_font.getbbox("Ag")[3] - content_font.getbbox("Ag")[1] + 8)
-                current_y += content_height + 35
-
-            # 7. СТАТИСТИКА (сетка)
-            stats = template_data.get('stats', [])
-            if stats:
-                stat_card_width = min(200, content_width // 2 - 10)
-                stat_card_height = 80
-
-                # Вычисляем сетку
-                items_per_row = max(1, content_width // (stat_card_width + 10))
-                current_stat_x = content_x
-
-                for i, stat in enumerate(stats[:6]):  # Максимум 6 элементов
-                    if i > 0 and i % items_per_row == 0:
-                        current_stat_x = content_x
-                        current_y += stat_card_height + 10
-
-                    # Карточка статистики
-                    stat_bg = Image.new('RGBA', (stat_card_width, stat_card_height),
-                                      (248, 249, 250, 200))  # Светло-серый
-                    img.paste(stat_bg, (current_stat_x, current_y), stat_bg)
-
-                    # Число
-                    number_font = self._get_font(48, bold=True)  # Увеличен с 42 до 48
-                    number_color = self._hex_to_rgb(template_data['primary_color'])
-                    number_bbox = number_font.getbbox(stat.get('number', '0'))
-                    number_x = current_stat_x + stat_card_width // 2 - (number_bbox[2] - number_bbox[0]) // 2
-                    number_y = current_y + 10  # Подняты выше для лучшего баланса
-                    draw.text((number_x, number_y), str(stat.get('number', '0')),
-                            font=number_font, fill=number_color)
-
-                    # Лейбл
-                    label_font = self._get_font(18)  # Увеличен с 14 до 18
-                    label_text = self._wrap_text(stat.get('label', ''), label_font, stat_card_width - 10)
-                    label_x = current_stat_x + stat_card_width // 2
-                    label_y = current_y + 55  # Ниже для лучшего размещения большого числа
-                    self._draw_multiline_text(
-                        draw, label_text, (label_x, label_y),
-                        label_font, (102, 102, 102), anchor="mt"  # middle top
-                    )
-
-                    current_stat_x += stat_card_width + 10
-
-                current_y += stat_card_height + 20
-
-            # 8. CTA КНОПКА
-            if template_data.get('cta_text'):
-                button_width = 300
-                button_height = 50
-                button_x = content_x + (content_width - button_width) // 2
-                button_y = current_y
-
-                # Кнопка с градиентом
-                button_gradient = self._create_gradient_background(
-                    button_width, button_height,
-                    template_data['primary_color'],
-                    template_data['secondary_color']
-                )
-
-                # Закругленные углы (аппроксимация через маску)
-                mask = Image.new('L', (button_width, button_height), 0)
-                mask_draw = ImageDraw.Draw(mask)
-                mask_draw.rounded_rectangle([(0, 0), (button_width, button_height)], 25, fill=255)
-                button_img = Image.new('RGBA', (button_width, button_height))
-                button_img.paste(button_gradient, (0, 0))
-                img.paste(button_img, (button_x, button_y), mask)
-
-                # Текст кнопки
-                button_font = self._get_font(20, bold=True)
-                bbox = button_font.getbbox(template_data['cta_text'])
-                text_width = bbox[2] - bbox[0]
-                text_x = button_x + button_width // 2 - text_width // 2
-                text_y = button_y + button_height // 2 - (bbox[3] - bbox[1]) // 2 + 2
-
-                draw.text((text_x, text_y), template_data['cta_text'],
-                        font=button_font, fill=(255, 255, 255))
-
-                current_y += button_height + 20
-
-            # 9. FOOTER
-            footer_font = self._get_font(20)  # Увеличен с 16 до 20
-            footer_color = self._hex_to_rgb(template_data['primary_color'])
-            footer_text = template_data.get('org_name', 'НКО')
-            if template_data.get('contact_info'):
-                footer_text += f" • {template_data['contact_info']}"
-
-            footer_lines = self._wrap_text(footer_text, footer_font, content_width)
-
-            # Позиция футера - внизу карточки
-            bbox = footer_font.getbbox("Ag")
-            footer_height = (footer_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 4)
-            footer_y = card_y + card_height - footer_height - 15
-
-            footer_x = content_x + content_width // 2
-            self._draw_multiline_text(
-                draw, footer_lines, (footer_x, footer_y),
-                footer_font, footer_color, anchor="mt"  # middle top
-            )
-
-            # Конвертируем в bytes
-            from io import BytesIO
-            output = BytesIO()
-            img.save(output, format='PNG')
-            card_bytes = output.getvalue()
-
-            logger.info(f"Карточка PIL успешно сгенерирована: {len(card_bytes)} байт")
-            return card_bytes
-
-        except Exception as e:
-            logger.error(f"Ошибка генерации PIL-карточки '{template_name}': {e}")
-            raise
+            current_x += bbox[2] - bbox[0] + 4
 
 
 class HTTPServerManager:
-    """Менеджер HTTP-сервера для обслуживания шаблонов Playwright."""
+    """
+    Менеджер HTTP-сервера для обслуживания шаблонов Playwright.
+    
+    Запускает простой HTTP-сервер в отдельном потоке для
+    обслуживания HTML шаблонов и статических ресурсов,
+    которые нужны Playwright для корректной работы.
+    """
 
     def __init__(self, templates_dir: Path, port: int = 8000):
+        """
+        Инициализация менеджера HTTP-сервера.
+        
+        Args:
+            templates_dir (Path): Директория с шаблонами
+            port (int): Порт для сервера
+        """
         self.templates_dir = templates_dir
         self.port = port
         self.server_thread = None
@@ -1340,7 +969,12 @@ class HTTPServerManager:
         self.loop = None
 
     def _check_port_available(self) -> bool:
-        """Проверка доступности порта."""
+        """
+        Проверка доступности порта.
+        
+        Returns:
+            bool: True если порт свободен
+        """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.bind(('127.0.0.1', self.port))
@@ -1350,18 +984,22 @@ class HTTPServerManager:
             return False
 
     async def _start_http_server_async(self):
-        """Запуск HTTP-сервера в асинхронном режиме."""
-
+        """
+        Запуск HTTP-сервера в асинхронном режиме.
+        
+        Создает простой HTTP сервер для обслуживания статических
+        файлов и HTML шаблонов для Playwright.
+        """
         async def handle_request(request):
-            """Обработчик запросов."""
+            """Обработчик HTTP запросов."""
             file_path = self.templates_dir / request.match_info['filename']
 
             # Проверка безопасности - файл должен быть в templates_dir
             if not str(file_path).startswith(str(self.templates_dir)):
-                return web.Response(status=403, text="Access denied")
+                return web.Response(status=403, text="Доступ запрещен")
 
             if not file_path.exists():
-                return web.Response(status=404, text="File not found")
+                return web.Response(status=404, text="Файл не найден")
 
             try:
                 with open(file_path, 'rb') as f:
@@ -1390,8 +1028,8 @@ class HTTPServerManager:
                     return web.Response(body=content, content_type=content_type)
 
             except Exception as e:
-                logger.error(f"Error serving {file_path}: {e}")
-                return web.Response(status=500, text="Internal server error")
+                logger.error(f"Ошибка обслуживания {file_path}: {e}")
+                return web.Response(status=500, text="Внутренняя ошибка сервера")
 
         app = web.Application()
         app.router.add_get('/{filename:.*}', handle_request)
@@ -1404,7 +1042,7 @@ class HTTPServerManager:
 
         logger.info(f"HTTP-сервер запущен на http://127.0.0.1:{self.port} для директории {self.templates_dir}")
 
-        # Сохраняем ссылки для остановки
+        # Сохранение ссылок для остановки
         self.server = runner
         self.site = site
 
@@ -1417,7 +1055,12 @@ class HTTPServerManager:
             logger.info("HTTP-сервер остановлен")
 
     def start_in_thread(self):
-        """Запуск HTTP-сервера в отдельном потоке."""
+        """
+        Запуск HTTP-сервера в отдельном потоке.
+        
+        Returns:
+            bool: True если сервер успешно запущен
+        """
         if not self._check_port_available():
             logger.warning(f"Порт {self.port} уже занят. HTTP-сервер не запущен.")
             return False
@@ -1431,11 +1074,13 @@ class HTTPServerManager:
 
         self.server_thread = threading.Thread(target=run_server, daemon=True)
         self.server_thread.start()
-        logger.info(f"HTTP-сервер поток запущен на порту {self.port}")
+        logger.info(f"HTTP-сервер запущен в потоке на порту {self.port}")
         return True
 
     async def stop(self):
-        """Остановка HTTP-сервера."""
+        """
+        Остановка HTTP-сервера.
+        """
         if self.server:
             await self.server.cleanup()
             logger.info("HTTP-сервер остановлен")
