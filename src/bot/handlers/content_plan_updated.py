@@ -14,7 +14,6 @@ from bot.keyboards.inline import (
     get_skip_keyboard,
 )
 from services.content_generation import TextContentGenerationService
-from services.content_plan_service import ContentPlanService
 
 # Константы для контент-плана
 PERIOD_OPTIONS = ["3 дня", "Неделя", "Месяц"]
@@ -40,7 +39,7 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
         )
 
         # Сохраняем план в базу данных
-        content_plan_service: ContentPlanService = dp["content_plan_service"]
+        content_plan_service = dp["content_plan_service"]
         plan_id = await content_plan_service.save_content_plan(
             user_id=message.from_user.id,
             user_data=data,
@@ -60,10 +59,10 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
 
         # Отправляем уведомление о создании плана
         notification_service = dp["notification_service"]
-        plan = content_plan_service.repository.get_plan_by_id(plan_id, message.from_user.id)
+        plan = await content_plan_service.repository.get_plan_by_id(plan_id, message.from_user.id)
         if plan:
             # Получаем количество элементов плана
-            items = content_plan_service.repository.get_plan_items(plan_id, message.from_user.id)
+            items = await content_plan_service.repository.get_plan_items(plan_id, message.from_user.id)
             item_count = len(items) if items else 0
             
             await notification_service.send_plan_created_notification(plan, item_count)

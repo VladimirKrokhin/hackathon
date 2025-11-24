@@ -17,12 +17,25 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📝 Создание контента", callback_data="create_content")],
-            [InlineKeyboardButton(text="📅 Контент-план", callback_data="content_plan")],
+            [InlineKeyboardButton(text="📅 Управление контент-планами", callback_data="content_plan")],
             [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data="edit_text")],
             [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data="generate_images")],
             [InlineKeyboardButton(text="📋 Информация о НКО", callback_data="ngo_info")]
         ]
     )
+
+
+def get_content_plan_menu_keyboard(has_plans: bool = False) -> InlineKeyboardMarkup:
+    """Меню управления контент-планами."""
+    buttons = []
+    
+    if has_plans:
+        buttons.append([InlineKeyboardButton(text="📋 Посмотреть мои планы", callback_data="content_plan_view")])
+    
+    buttons.append([InlineKeyboardButton(text="➕ Создать новый план", callback_data="content_plan_create")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="content_plan_back")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_content_creation_menu_keyboard() -> InlineKeyboardMarkup:

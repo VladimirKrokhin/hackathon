@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.enums.parse_mode import ParseMode
 
-from app import dp
+from bot.app import dp
 from bot.states import ContentGeneration
 from bot.keyboards.inline import get_post_generation_keyboard
 from services.content_generation import TextContentGenerationService

@@ -12,7 +12,7 @@ from bot.keyboards.inline import (
     get_yes_no_keyboard,
     get_image_source_keyboard,
 )
-from app import bot
+from bot.app import bot, dp
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,6 @@ async def ngo_info_choice_handler(message: Message, state: FSMContext):
 
     if has_ngo:
         # Получаем данные НКО из БД
-        from app import dp
         ngo_service = dp["ngo_service"]
         user_id = message.from_user.id
         ngo_data = ngo_service.get_ngo_data(user_id)
@@ -376,7 +375,7 @@ async def user_document_handler(message: Message, state: FSMContext):
         )
         return
 
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:
@@ -568,7 +567,7 @@ async def free_user_image_handler(message: Message, state: FSMContext):
     photo = message.photo[-1]
 
     # Скачиваем изображение
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:
@@ -610,7 +609,7 @@ async def free_user_document_handler(message: Message, state: FSMContext):
         )
         return
 
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:

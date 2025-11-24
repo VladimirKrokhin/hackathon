@@ -20,7 +20,7 @@ from bot.keyboards.inline import (
     get_narrative_style_keyboard,
     get_platform_keyboard,
 )
-from app import dp
+from bot.app import dp, bot
 
 logger = logging.getLogger(__name__)
 
@@ -943,7 +943,6 @@ async def wizard_user_image_handler(message: Message, state: FSMContext):
         return
 
     photo = message.photo[-1]
-    from app import bot
 
     try:
         image_file = await bot.download(photo.file_id, destination=None)
@@ -977,8 +976,6 @@ async def wizard_user_document_handler(message: Message, state: FSMContext):
     if not mime_type or not mime_type.startswith('image/'):
         await message.answer("Пожалуйста, отправьте файл с изображением.")
         return
-
-    from app import bot
 
     try:
         document_file = await bot.download(message.document.file_id, destination=None)
@@ -1527,7 +1524,6 @@ async def wizard_regenerate_cards_from_text(message: Message, state: FSMContext,
         platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
 
         # Получаем информацию об НКО из базы данных
-        from app import dp
         ngo_service = dp["ngo_service"]
         user_id = message.from_user.id
         ngo_data = ngo_service.get_ngo_data(user_id)

@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 
 from bot.handlers.start import start_handler
 from bot.states import ContentGeneration, ContentPlan
-from app import bot, dp
+from bot.app import bot, dp
 
 callbacks_router = Router(name="callbacks")
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ async def generate_images_handler(callback: CallbackQuery, state: FSMContext):
 async def ngo_info_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик информации о НКО - проверяет наличие данных и показывает меню."""
     await callback.answer()
-    from app import dp
+    from bot.app import dp
     from bot.keyboards.inline import get_ngo_info_menu_keyboard
     
     ngo_service = dp["ngo_service"]
@@ -144,7 +144,7 @@ async def structured_content_callback(callback: CallbackQuery, state: FSMContext
     await state.update_data(generation_mode="structured", has_ngo_info=False)
     
     # Проверяем наличие данных НКО
-    from app import dp
+    from bot.app import dp
     ngo_service = dp["ngo_service"]
     user_id = callback.from_user.id
     
@@ -178,7 +178,7 @@ async def free_form_content_callback(callback: CallbackQuery, state: FSMContext)
     await state.update_data(generation_mode="free_form", has_ngo_info=False)
     
     # Проверяем наличие данных НКО
-    from app import dp
+    from bot.app import dp
     ngo_service = dp["ngo_service"]
     user_id = callback.from_user.id
     
@@ -208,7 +208,7 @@ async def free_form_content_callback(callback: CallbackQuery, state: FSMContext)
 async def view_ngo_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик просмотра НКО."""
     await callback.answer()
-    from app import dp
+    from bot.app import dp
     
     ngo_service = dp["ngo_service"]
     user_id = callback.from_user.id
@@ -286,7 +286,7 @@ async def yes_handler(callback: CallbackQuery, state: FSMContext):
         if current_state == ContentGeneration.waiting_for_ngo_info_choice:
             await state.update_data(has_ngo_info=True)
             # Загружаем данные НКО из БД и переходим к генерации контента
-            from app import dp
+            from bot.app import dp
             ngo_service = dp["ngo_service"]
             user_id = callback.from_user.id
             ngo_data = ngo_service.get_ngo_data(user_id)
@@ -672,7 +672,7 @@ async def ngo_done_handler(callback: CallbackQuery, state: FSMContext):
         ngo_name = data.get("ngo_name", "")
 
         # Получаем сервис НКО и сохраняем данные в БД
-        from app import dp
+        from bot.app import dp
         ngo_service = dp["ngo_service"]
         user_id = callback.from_user.id
 
@@ -1161,7 +1161,7 @@ async def callback_user_image_handler(message: Message, state: FSMContext):
     photo = message.photo[-1]
 
     # Скачиваем изображение
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:
@@ -1203,7 +1203,7 @@ async def callback_user_document_handler(message: Message, state: FSMContext):
         )
         return
 
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:
@@ -1262,7 +1262,7 @@ async def callback_free_user_image_handler(message: Message, state: FSMContext):
     photo = message.photo[-1]
 
     # Скачиваем изображение
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:
@@ -1304,7 +1304,7 @@ async def callback_free_user_document_handler(message: Message, state: FSMContex
         )
         return
 
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:
@@ -1506,7 +1506,7 @@ async def handle_card_user_document(message: Message, state: FSMContext):
         )
         return
 
-    from app import dp
+    from bot.app import dp
     bot = dp["bot"]
 
     try:

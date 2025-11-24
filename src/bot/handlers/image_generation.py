@@ -6,7 +6,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.types.input_file import BufferedInputFile
 from aiogram.enums.parse_mode import ParseMode
 
-from app import dp
+from bot.app import dp
 from bot.states import ImageGeneration
 from bot.keyboards.reply import (
     get_image_size_keyboard,

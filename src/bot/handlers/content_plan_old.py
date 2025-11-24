@@ -14,7 +14,6 @@ from bot.keyboards.inline import (
     get_skip_keyboard,
 )
 from services.content_generation import TextContentGenerationService
-from services.content_plan_service import ContentPlanService
 
 # Константы для контент-плана
 PERIOD_OPTIONS = ["3 дня", "Неделя", "Месяц"]
@@ -24,59 +23,6 @@ SKIP_OPTION = "⏩ Пропустить"
 
 content_plan_router = Router(name="content_plan")
 logger = logging.getLogger(__name__)
-
-
-async def generate_and_save_plan(message: Message, state: FSMContext, data: dict) -> None:
-    """
-    Общая функция для генерации и сохранения контент-плана
-    """
-    try:
-        text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
-        generated_plan = await text_generation_service.generate_content_plan(data)
-
-        await message.answer(
-            "🧠 Генерирую контент-план...",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-
-        # Сохраняем план в базу данных
-        content_plan_service: ContentPlanService = dp["content_plan_service"]
-        plan_id = await content_plan_service.save_content_plan(
-            user_id=message.from_user.id,
-            user_data=data,
-            generated_plan=generated_plan
-        )
-
-        # Отправляем план пользователю
-        await message.answer(
-            f"✅ Ваш контент-план создан и сохранен!",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        await message.answer(
-            generated_plan,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=ReplyKeyboardRemove(),
-        )
-
-        # Отправляем уведомление о создании плана
-        notification_service = dp["notification_service"]
-        plan = content_plan_service.repository.get_plan_by_id(plan_id, message.from_user.id)
-        if plan:
-            # Получаем количество элементов плана
-            items = content_plan_service.repository.get_plan_items(plan_id, message.from_user.id)
-            item_count = len(items) if items else 0
-            
-            await notification_service.send_plan_created_notification(plan, item_count)
-
-        await state.clear()
-
-    except Exception as error:
-        logger.exception("Ошибка при генерации контент-плана: %s", error)
-        await message.answer(
-            "⚠️ Не удалось создать контент-план.",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        raise error
 
 
 @content_plan_router.message(Command("contentplan"))
@@ -155,7 +101,35 @@ async def details_message_handler(message: Message, state: FSMContext):
     await state.update_data(details=details)
 
     data = await state.get_data()
-    await generate_and_save_plan(message, state, data)
+
+    await message.answer(
+        "🧠 Генерирую контент-план...",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+    try:
+        text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
+        generated_plan = await text_generation_service.generate_content_plan(data)
+
+        await message.answer(
+            f"✅ Ваш сгенерированный контент-план:",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await message.answer(
+            generated_plan,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        await state.clear()
+
+    except Exception as error:
+        logger.exception("Ошибка при генерации контент-плана: %s", error)
+        await message.answer(
+            "⚠️ Не удалось получить ответ.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        raise error
 
 
 # === CALLBACK HANDLERS для обработки кнопок ===
@@ -248,8 +222,37 @@ async def skip_step_handler(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
     if current_state == ContentPlan.waiting_for_details:
         await state.update_data(details="")
+
         data = await state.get_data()
-        await generate_and_save_plan(callback.message, state, data)
+
+        await callback.message.answer(
+            "🧠 Генерирую контент-план...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        try:
+            text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
+            generated_plan = await text_generation_service.generate_content_plan(data)
+
+            await callback.message.answer(
+                f"✅ Ваш сгенерированный контент-план:",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            await callback.message.answer(
+                generated_plan,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=ReplyKeyboardRemove(),
+            )
+
+            await state.clear()
+
+        except Exception as error:
+            logger.exception("Ошибка при генерации контент-плана: %s", error)
+            await callback.message.answer(
+                "⚠️ Не удалось получить ответ.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            raise error
 
 
 @content_plan_router.callback_query(F.data == "back_to_previous")
@@ -259,3 +262,6 @@ async def back_to_previous_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     from bot.handlers.start import start_handler
     await start_handler(callback.message, state)
+
+
+# Конец файла

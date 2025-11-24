@@ -8,7 +8,7 @@ from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from aiogram.filters import Command
-from app import dp
+from bot.app import dp
 
 from bot.states import NGOInfo, ContentGeneration
 from bot.keyboards.inline import (

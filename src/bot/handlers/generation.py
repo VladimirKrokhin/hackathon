@@ -15,7 +15,7 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.types.input_file import BufferedInputFile
 
-from app import dp
+from bot.app import dp
 from bot.states import ContentGeneration
 from bot.keyboards.inline import get_post_generation_keyboard
 from bot.utils import (

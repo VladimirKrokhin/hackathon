@@ -32,7 +32,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor, ImageOps
 from playwright.async_api import Browser, BrowserContext, Page
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from config import config
-from app import dp
+from bot.app import dp
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 

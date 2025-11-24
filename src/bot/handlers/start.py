@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 
 from bot.states import ContentGeneration, NGOInfo
 from bot.keyboards.inline import get_main_menu_keyboard
-from app import dp
+from bot.app import dp
 
 logger = logging.getLogger(__name__)
 

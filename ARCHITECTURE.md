@@ -112,7 +112,7 @@ hackathon/
 import asyncio
 import logging
 from bootstrap import bootstrap
-from app import bot, dp
+from bot.app import bot, dp
 
 logging.basicConfig(
     level=logging.INFO,

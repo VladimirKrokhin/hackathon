@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.enums.parse_mode import ParseMode
 
-from app import dp
+from bot.app import dp
 from bot.states import EditText
 from bot.keyboards.inline import get_skip_keyboard
 from services.content_generation import TextContentGenerationService
@@ -56,7 +56,6 @@ async def text_handler(message: Message, state: FSMContext):
     await state.update_data(text_to_edit=text_to_edit)
 
     # Проверяем наличие данных НКО для улучшения редактирования
-    from app import dp
     ngo_service = dp["ngo_service"]
     user_id = message.from_user.id
 

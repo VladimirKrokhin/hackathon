@@ -5,6 +5,7 @@
 - Сервис генерации текстов (YandexGPT)
 - Сервис генерации карточек (PIL и Playwright)
 - Инициализация базы данных и сервиса управления НКО
+- Сервисы контент-планов и уведомлений
 
 Также модуль предоставляет фабричные функции для создания сущностей сервисов и
 процедуры обработки запуска и остановки приложения.
@@ -35,6 +36,10 @@ from infrastructure.repositories.ngo_repository import NGORepository
 from services.ngo_service import NGOService
 from infrastructure.image_generation import create_fusion_brain_image_generator
 from services.image_generation import ImageGenerationService
+from infrastructure.repositories.content_plan_repository import ContentPlanRepository
+from services.content_plan_service import ContentPlanService
+from services.notification_service import NotificationService
+from scheduler.content_plan_scheduler import ContentPlanScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +199,30 @@ async def build_fusion_brain_image_generation_service() -> ImageGenerationServic
     return image_generation_service
 
 
+async def build_content_plan_services(bot: Bot) -> tuple[ContentPlanService, NotificationService, ContentPlanScheduler, ContentPlanRepository]:
+    """
+    Инициализирует сервисы для работы с контент-планами.
+    
+    Args:
+        bot: Экземпляр бота Telegram
+        
+    Returns:
+        tuple: (ContentPlanService, NotificationService, ContentPlanScheduler, ContentPlanRepository)
+    """
+    logger.info("Инициализация сервисов контент-плана...")
+    
+    # Инициализируем базу данных и репозиторий с сессией
+    init_database()  # Инициализирует соединение с базой данных
+    session = get_db_session()
+    content_plan_repository = ContentPlanRepository(session)
+    
+    # Создаем сервисы
+    content_plan_service = ContentPlanService(content_plan_repository)
+    notification_service = NotificationService(bot, content_plan_repository)
+    scheduler = ContentPlanScheduler(notification_service)
+    
+    logger.info("Сервисы контент-плана успешно инициализированы")
+    return content_plan_service, notification_service, scheduler, content_plan_repository
 
 
 def build_ngo_service() -> NGOService:
@@ -205,7 +234,8 @@ def build_ngo_service() -> NGOService:
         
     Raises:
         Exception: Если инициализация падает
-    """    # Инициализирует базу данных и сервис НКО
+    """    
+    # Инициализирует базу данных и сервис НКО
     init_database()  # Инициализирует соединеие с базой данных
     session = get_db_session()
     ngo_repository = NGORepository(session)
@@ -238,9 +268,13 @@ async def build_services(bot: Bot, dispatcher: Dispatcher):
     dp["card_generation_service"]: CardGenerationService = await _create_card_generation_service(bot, dp) 
     dp["image_generation_service"]: ImageGenerationService = await _create_image_generation_service()
     
-
-    
     dp["ngo_service"] = _create_ngo_service()
+    
+    # Инициализируем сервисы контент-плана
+    content_plan_service, notification_service, scheduler, _ = await build_content_plan_services(bot)
+    dp["content_plan_service"] = content_plan_service
+    dp["notification_service"] = notification_service
+    dp["content_plan_scheduler"] = scheduler
 
     logger.info("Сервисы приложения успешно собраны")
 
@@ -257,6 +291,12 @@ async def on_startup(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], ro
     """
     logger.info("Инициализирую бота и подготавливаю окружение")
     await build_services(bot, dispatcher)
+    
+    # Запускаем планировщик уведомлений
+    scheduler = dispatcher.get("content_plan_scheduler")
+    if scheduler:
+        scheduler.start()
+        logger.info("Планировщик уведомлений контент-плана запущен")
 
 
 async def on_shutdown(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], router: Router):
@@ -270,6 +310,12 @@ async def on_shutdown(bot: Bot, dispatcher: Dispatcher, bots: tuple[Bot, ...], r
         router: Основной router для обработки сообщений
     """
     logger.info("Останавливаю бота")
+
+    # Останавливаем планировщик
+    scheduler = dispatcher.get("content_plan_scheduler")
+    if scheduler:
+        scheduler.stop()
+        logger.info("Планировщик уведомлений остановлен")
 
     dp = dispatcher
     # TODO: перепиши на шину

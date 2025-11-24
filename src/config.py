@@ -99,6 +99,18 @@ class Config(BaseSettings):
         description="Debug mode flag"
     )
 
+    # Настройки уведомлений контент-плана
+    NOTIFICATION_CHECK_INTERVAL: int = Field(
+        default=30, 
+        env="NOTIFICATION_CHECK_INTERVAL",
+        description="Интервал проверки уведомлений в минутах"
+    )
+    NOTIFICATION_TIME_BEFORE: int = Field(
+        default=60, 
+        env="NOTIFICATION_TIME_BEFORE",
+        description="За сколько минут до публикации отправлять уведомление"
+    )
+
     # Разрешения для генерации карточек
     SOCIAL_MEDIA_SIZES: Dict[str, Dict[str, Dict[str, int]]] = {
         "📱 ВКонтакте (для молодежи)": {

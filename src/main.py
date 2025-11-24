@@ -5,7 +5,7 @@
 import asyncio
 import logging
 from bootstrap import bootstrap
-from app import bot, dp
+from bot.app import bot, dp
 
 # Конфигурация логгирования
 logging.basicConfig(
