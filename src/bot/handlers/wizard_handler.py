@@ -850,6 +850,7 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
             reply_markup=get_wizard_image_prompt_preview_keyboard(),
             parse_mode=ParseMode.MARKDOWN,
         )
+        await state.update_data(enhanced_image_prompt=enhanced_prompt)
         await state.set_state(ContentWizard.waiting_for_wizard_image_prompt_edit)
 
     except Exception as e:
@@ -1330,10 +1331,36 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
 @wizard_router.message(ContentWizard.waiting_for_wizard_image_prompt_edit, F.text)
 async def wizard_image_prompt_edit_handler(message: Message, state: FSMContext):
     """Обработка редактирования промпта."""
+    old_prompt = await state.get_value("enhanced_prompt")
     new_prompt = message.text.strip()
 
-    # Здесь можно добавить улучшение промпта ИИ
-    enhanced_prompt = new_prompt  # Пока без улучшения
+    # Получаем сервис генерации текста для улучшения промпта
+    text_generation_service = dp["text_content_generation_service"]
+
+    # Системный промпт для улучшения промпта изображений
+    system_prompt = (
+        "Ты — эксперт по созданию промптов для генерации изображений ИИ. "
+        "Твоя задача — улучшить пользовательский промпт на русском языке, "
+        "сделав его более детализированным и эффективным для создания качественных изображений. "
+        "Добавь детали о стиле, освещении, композиции, цветах. "
+        "Результат должен быть на русском языке, коротким (1-2 предложения), "
+        "и подходящим для социальных сетей НКО. "
+        "Ответь только улучшенным промптом, без дополнительных комментариев."
+        "Примеры хороших промптов по теме поста:"
+        "(Пост о защите животных) Промпт: 'Котики играют на мягком ковре, теплое освещение, забота, уют.'"
+        "(Пост о пожилых людях) Промпт: 'Несколько пожилых людей гуляют по парку осенью. "
+        "Нет искажения лиц, нет артифактов, реалистичность.'"
+    )
+
+    # Пользовательский промпт для улучшения
+    user_prompt = (f"Учитывая эти указания: {new_prompt}, "
+                   f"улучши данный промпт для генерации изображения: {old_prompt}")
+
+    # Вызываем GPT для улучшения промпта
+    logger.info(f"Начинаю улучшение промпта: '{old_prompt}'")
+    raw_response = await text_generation_service.gpt_client.generate(user_prompt, system_prompt)
+    enhanced_prompt = text_generation_service.response_processor.process_response(raw_response)
+
     await state.update_data(enhanced_image_prompt=enhanced_prompt)
 
     await message.answer(
