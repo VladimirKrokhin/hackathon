@@ -10,7 +10,7 @@ from dtos import PlanPromptContext
 from infrastructure.gpt import AbstractGPT
 from infrastructure.prompt_builder import AbstractPromptBuilder
 from infrastructure.response_processor import AbstractResponseProcessor
-from models import ContentPlan, PublicationStatus
+from models import ContentPlan, PublicationStatus, ContentPlanItem
 from infrastructure.repositories.content_plan_repository import AbstractContentPlanRepository
 
 logger = logging.getLogger(__name__)
@@ -266,11 +266,57 @@ class ContentPlanService:
 
         logger.info(f"Генерация контент-плана.")
 
-        prompt = self.prompt_builder.build_content_plan_prompt(context)
+        prompt = self.prompt_builder.build_structured_content_plan_prompt(context)
         logger.info(f"Сформирован промпт длиной {len(prompt)} символов")
 
         raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
         generated_text = self.response_processor.process_response(raw_response)
 
-        logger.info(f"Успешно сгенерирован контент-план длиной {len(generated_text)} символов")
-        return generated_text
+        try:
+            items_data = self.response_processor.parse_json_list(generated_text)
+        except Exception as e:
+            logger.error(f"Ошибка парсинга ответа модели: {e}")
+            raise ValueError("Модель вернула некорректный формат данных. Попробуйте еще раз.")
+
+        # Преобразование данных в объекты ContentPlanItem
+        plan_items = []
+        for item in items_data:
+            try:
+                # Парсинг даты из ISO формата (YYYY-MM-DDTHH:MM:SS)
+                pub_date = datetime.fromisoformat(item.get("publication_date"))
+
+                content_item = ContentPlanItem(
+                    id_=None,  # Еще не сохранено в БД
+                    content_plan_id=0,  # Будет присвоено после сохранения плана
+                    publication_date=pub_date,
+                    content_title=item.get("content_title", "Без заголовка"),
+                    content_text=item.get("content_text", ""),
+                    status=PublicationStatus.SCHEDULED,
+                    notification_sent=False,
+                    notification_sent_at=None
+                    # В dataclass поле может быть Optional, если нет - нужно добавить default=None или передать None
+                )
+                plan_items.append(content_item)
+            except Exception as e:
+                logger.warning(f"Пропуск некорректного элемента плана: {item}. Ошибка: {e}")
+                continue
+
+        if not plan_items:
+            raise ValueError("Не удалось сформировать ни одного пункта плана из ответа модели.")
+
+        # Сборка итогового объекта ContentPlan
+        # Используем данные из context для заполнения мета-информации
+        content_plan = ContentPlan(
+            id_=None,
+            user_id=context.user_id,
+            plan_name=f"Контент-план: {context.topic}"[:100],  # Ограничение длины на всякий случай
+            period=context.period if hasattr(context, 'period') else "Не указан",
+            frequency=context.frequency if hasattr(context, 'frequency') else "Не указана",
+            topics=context.topic,
+            details=f"Сгенерировано для: {context.topic}",
+            plan_data={"raw_items_count": len(items_data)},  # Можно сохранить метаданные
+            items=tuple(plan_items)
+        )
+
+        logger.info(f"Успешно сгенерирован структурированный план на {len(plan_items)} постов")
+        return content_plan

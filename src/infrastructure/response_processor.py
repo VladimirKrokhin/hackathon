@@ -9,7 +9,7 @@
 from abc import ABC, abstractmethod
 import json
 import re
-from typing import Dict
+from typing import Dict, List, Any
 
 import logging
 
@@ -191,3 +191,37 @@ class YandexGPTResponseProcessor(AbstractResponseProcessor):
         text = re.sub(r'!([^!]+)!', process_exclamation_pattern, text)
         
         return text
+
+    def parse_json_list(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Парсит текст ответа в список словарей.
+        Удаляет Markdown разметку (```json ... ```) и пытается распарсить JSON.
+        """
+        try:
+            # 1. Очистка от Markdown блоков кода
+            clean_text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
+            clean_text = re.sub(r'```\s*', '', clean_text)
+
+            # 2. Очистка от лишних символов в начале/конце
+            clean_text = clean_text.strip()
+
+            # 3. Попытка найти JSON массив, если есть лишний текст вокруг
+            # Ищем от первой [ до последней ]
+            match = re.search(r'\[.*\]', clean_text, re.DOTALL)
+            if match:
+                clean_text = match.group(0)
+
+            # 4. Парсинг
+            data = json.loads(clean_text)
+
+            if not isinstance(data, list):
+                raise ValueError("JSON ответ должен быть списком (массивом) объектов")
+
+            return data
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка декодирования JSON: {e}. Текст: {text[:200]}...")
+            raise ValueError(f"Не удалось преобразовать ответ модели в JSON: {e}")
+        except Exception as e:
+            logger.error(f"Ошибка при парсинге JSON списка: {e}")
+            raise
