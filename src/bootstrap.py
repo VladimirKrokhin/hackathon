@@ -39,7 +39,7 @@ from services.image_generation import ImageGenerationService
 from services.content_plan_service import ContentPlanService
 from services.notification_service import NotificationService
 
-from infrastructure.content_plan_scheduler import ContentPlanScheduler
+from infrastructure.content_plan_scheduler import ContentPlanScheduler, start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,6 @@ async def build_and_bind_services(bot: Bot, dispatcher: Dispatcher):
         dispatcher: Диспетчер
     """
     logger.info("Собираю сервисы приложения...")
-    dp = dispatcher
 
     sqlalchemy_db = init_database()
     session = get_db_session()
@@ -91,50 +90,43 @@ async def build_and_bind_services(bot: Bot, dispatcher: Dispatcher):
     ngo_repository: AbstractNGORepository = SqlAlchemyNgoRepository(session)
 
     # Инициализирует сервисы генерации изображений
-    dp["text_content_generation_service"]: TextGenerationService = TextGenerationService(
+    dispatcher["text_content_generation_service"]: TextGenerationService = TextGenerationService(
         prompt_builder=prompt_builder,
         gpt_client=gpt_client,
         response_processor=response_processor,
     )
-    dp["card_generation_service"]: CardGenerationService = CardGenerationService(
+    dispatcher["card_generation_service"]: CardGenerationService = CardGenerationService(
         card_generator=card_generator,
         prompt_builder=prompt_builder,
         gpt_client=gpt_client,
         response_processor=response_processor,
     )
 
-    dp["image_generation_service"]: ImageGenerationService = ImageGenerationService(
+    dispatcher["image_generation_service"]: ImageGenerationService = ImageGenerationService(
         image_generator=image_generator
     )
 
-    dp["ngo_service"] = NGOService(
+    dispatcher["ngo_service"] = NGOService(
         repository=ngo_repository,
     )
     
-    dp["content_plan_service"] = ContentPlanService(
+    dispatcher["content_plan_service"] = ContentPlanService(
         content_plan_repository=content_plan_repository,
         prompt_builder=prompt_builder,
         gpt_client=gpt_client,
         response_processor=response_processor,
     )
     notification_service = NotificationService(tg_notificator, content_plan_repository)
-    dp["notification_service"] = notification_service
-    dp["content_plan_scheduler"] = ContentPlanScheduler(notification_service)
+    dispatcher["notification_service"] = notification_service
+    content_plan_scheduler: ContentPlanScheduler = ContentPlanScheduler(notification_service)
 
 
-    scheduler = dp["content_plan_scheduler"]
-    def start_scheduler():
-        """Запускает планировщик."""
-        scheduler.start()
-        logger.info("Планировщик уведомлений контент-плана запущен")
+    dispatcher["content_plan_scheduler"] = content_plan_scheduler
 
-    def stop_scheduler():
-        """Останавливает планировщик."""
-        scheduler.stop()
-        logger.info("Планировщик уведомлений остановлен")
 
-    service_bus.register_startup(start_scheduler)
-    service_bus.register_shutdown(stop_scheduler)
+
+    service_bus.register_startup(lambda: start_scheduler(scheduler=content_plan_scheduler))
+    service_bus.register_shutdown(lambda: stop_scheduler(scheduler=content_plan_scheduler))
 
     logger.info("Сервисы приложения успешно собраны")
 

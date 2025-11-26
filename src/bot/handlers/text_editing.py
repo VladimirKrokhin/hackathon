@@ -12,6 +12,8 @@ from bot.handlers.start import BACK_TO_START_KEYBOARD
 from bot.states import EditText
 from services.text_generation import TextGenerationService
 
+from src.services.ngo_service import NGOService
+
 text_editing_router = Router(name="text_editing")
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ async def text_handler(message: Message, state: FSMContext):
     await state.update_data(text_to_edit=text_to_edit)
 
     # Проверяем наличие данных НКО для улучшения редактирования
-    ngo_service = dp["ngo_service"]
+    ngo_service: NGOService = dispatcher["ngo_service"]
     user_id = message.from_user.id
 
     if ngo_service.ngo_exists(user_id):
@@ -76,7 +78,7 @@ async def details_handler(message: Message, state: FSMContext):
     # Данные НКО уже должны быть в состоянии после выбора пользователя
     # Если их нет, но пользователь хотел использовать НКО, попробуем получить из БД
     if data.get("has_ngo_info") and not data.get("ngo_name"):
-        ngo_service = dp["ngo_service"]
+        ngo_service: NGOService = dispatcher["ngo_service"]
         user_id = message.from_user.id
         ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
         if ngo_data:

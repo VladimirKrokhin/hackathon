@@ -115,3 +115,11 @@ class ContentPlanScheduler:
                 "error": str(e)
             }
 
+
+def start_scheduler(scheduler: ContentPlanScheduler):
+    """Запускает планировщик."""
+    scheduler.start()
+
+def stop_scheduler(scheduler: ContentPlanScheduler):
+    """Останавливает планировщик."""
+    scheduler.stop()

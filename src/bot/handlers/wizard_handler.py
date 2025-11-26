@@ -16,6 +16,8 @@ from services.ngo_service import NGOService
 from services.card_generation import CardGenerationService
 from services.text_generation import TextGenerationService
 
+from bot.handlers.start import BACK_TO_START_MENU_CALLBACK_DATA
+
 logger = logging.getLogger(__name__)
 
 create_content_wizard = Router(name="wizard")
@@ -28,7 +30,7 @@ CONTENT_WIZARD_SELECT_MODE_KEYBOARD: InlineKeyboardMarkup = InlineKeyboardMarkup
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 Структурированная форма", callback_data="create_content_wizard_structured")],
             [InlineKeyboardButton(text="💭 Свободная форма", callback_data="wizard_free")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="wizard_back_to_main")]
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_START_MENU_CALLBACK_DATA)]
         ]
     )
 
@@ -127,18 +129,6 @@ async def wizard_free_mode_handler(callback: CallbackQuery, state: FSMContext):
 
     await state.set_state(ContentWizard.waiting_for_wizard_ngo)
 
-
-@create_content_wizard.callback_query(F.data == "wizard_back_to_main")
-async def wizard_back_to_main_handler(callback: CallbackQuery, state: FSMContext):
-    """Возврат в главное меню."""
-    await callback.answer()
-    await state.clear()
-
-    await callback.message.answer(
-        "🏠 Возвращаемся в главное меню",
-        reply_markup=BACK_TO_START_KEYBOARD,
-        parse_mode=ParseMode.MARKDOWN,
-    )
 
 
 # ===== ЭТАП 1: ОБРАБОТКА ВЫБОРА НКО =====

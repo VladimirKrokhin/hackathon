@@ -156,10 +156,10 @@ class PlanPromptContext:
             PlanPromptContext: Новый экземпляр с данными из словаря
         """
         return cls(
-            period=data.get("period", ""),
-            frequency=data.get("frequency", ""),
-            themes=data.get("themes", ""),
-            details=data.get("details", ""),
+            period=data["period"],
+            frequency=data["frequency"],
+            themes=data["themes"],
+            details=data["details"],
         )
 
 

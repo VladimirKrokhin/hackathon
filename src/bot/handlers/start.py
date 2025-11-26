@@ -14,31 +14,34 @@ from bot.handlers.ngo_info import VIEW_NGO_INFO_CALLBACK_DATA
 from models import Ngo
 from services.ngo_service import NGOService
 
+from bot.handlers.content_plan_menu import CONTENT_PLAN_MENU_CALLBACK_DATA
+
 logger = logging.getLogger(__name__)
 
 start_router = Router(name="start")
 
+BACK_TO_START_MENU_CALLBACK_DATA = "back_to_start_menu"
+
+
 ASSETS_BASE_DIR_PATH = Path(__file__).resolve().parent.parent
 ABOUT_PHOTO_PATH = ASSETS_BASE_DIR_PATH / 'assets' / 'about.png'
-
 ABOUT_PHOTO = FSInputFile(path=ABOUT_PHOTO_PATH)
 
 
 START_MENU_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📝 Создание контента", callback_data="create_content_wizard")],
-        [InlineKeyboardButton(text="📅 Управление контент-планами", callback_data="content_plan")],
+        [InlineKeyboardButton(text="📅 Управление контент-планами", callback_data=CONTENT_PLAN_MENU_CALLBACK_DATA)],
         [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data="edit_text")],
         [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data=GENERATE_IMAGES_CALLBACK_DATA)],
         [InlineKeyboardButton(text="📋 Информация о НКО", callback_data=VIEW_NGO_INFO_CALLBACK_DATA)],
     ]
 )
 
-BACK_TO_START_KEYBOARD_CALLBACK_DATA = "back_to_start_menu"
 
 BACK_TO_START_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="Вернуться в главное меню", callback_data=BACK_TO_START_KEYBOARD_CALLBACK_DATA)],
+        [InlineKeyboardButton(text="Вернуться в главное меню", callback_data=BACK_TO_START_MENU_CALLBACK_DATA)],
     ]
 )
 
@@ -49,7 +52,7 @@ BACK_TO_START_KEYBOARD = InlineKeyboardMarkup(
 async def start_handler(message: Message, state: FSMContext):
     """Точка входа - главное меню с выбором режима работы."""
     await state.clear()
-    
+
     # Проверяем наличие данных об НКО в БД
     ngo_service: NGOService = dispatcher["ngo_service"]
     user_id: int = message.from_user.id
@@ -82,3 +85,6 @@ async def start_handler(message: Message, state: FSMContext):
         )
 
 
+@start_router.callback_query(F.data == BACK_TO_START_MENU_CALLBACK_DATA)
+async def start_callback_query_handler(callback: CallbackQuery, state: FSMContext):
+    await start_handler(callback.message, state)
