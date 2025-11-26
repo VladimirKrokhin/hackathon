@@ -19,12 +19,12 @@ import json
 import logging
 import base64
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import aiohttp
 from aiohttp import FormData
 
-from config import config
+from dtos import Dimensions
 
 # Настройка логирования для модуля
 logger = logging.getLogger(__name__)
@@ -51,22 +51,18 @@ class AbstractImageGenerator(ABC):
         pass
 
     @abstractmethod
-    async def generate(
+    async def generate_image(
         self,
         prompt: str,
-        width: int = 1024,
-        height: int = 1024,
-        images: int = 1,
+        dimensions: Dimensions,
     ) -> bytes:
         """
         Генерирует изображение по текстовому описанию.
         
         Args:
             prompt (str): Текстовое описание желаемого изображения
-            width (int, optional): Ширина изображения в пикселях. По умолчанию 1024
-            height (int, optional): Высота изображения в пикселях. По умолчанию 1024
-            images (int, optional): Количество изображений для генерации. По умолчанию 1
-            
+            dimensions (Dimensions): Ширина и высота изображения в пикселях
+
         Returns:
             bytes: Байты сгенерированного изображения в формате PNG
             
@@ -417,32 +413,24 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
             logger.error(f"Ошибка декодирования base64 изображения: {e}")
             raise Exception(f"Ошибка декодирования изображения: {str(e)}")
 
-    async def generate(
+    async def generate_image(
         self,
         prompt: str,
-        width: int = 1024,
-        height: int = 1024,
-        images: int = 1,
+        dimensions: Dimensions,
     ) -> bytes:
         """
         Генерирует изображение по текстовому описанию.
         
-        Основной метод для генерации изображений. Включает предобработку
-        промпта, запуск генерации, мониторинг статуса и получение результата.
-        
         Args:
             prompt (str): Текстовое описание желаемого изображения
-            width (int, optional): Ширина изображения в пикселях. По умолчанию 1024
-            height (int, optional): Высота изображения в пикселях. По умолчанию 1024
-            images (int, optional): Количество изображений для генерации. По умолчанию 1
-            negative_prompt (Optional[str]): Негативный промпт для исключения элементов
-            
+            dimensions (Dimensions): Ширина и высота изображения в пикселях
+
         Returns:
             bytes: Байты сгенерированного изображения в формате PNG
-            
+
         Raises:
-            Exception: При ошибке генерации, недоступности API или превышении времени ожидания
-            
+            Exception: При ошибке генерации изображения или недоступности API
+
         Note:
             Включает базовую предобработку промпта для улучшения качества генерации.
             Для более сложной обработки рекомендуется использовать отдельный prompt builder.
@@ -460,6 +448,10 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
             sections.append(", у людей нормальные руки и ноги, люди изображены отчетливо. ")
 
         prompt = "\n".join(sections).strip()
+
+        width = dimensions.width
+        height = dimensions.height
+        images = 1
 
         # Запускаем генерацию
         uuid = await self._start_generation(prompt, width, height, images)
@@ -482,34 +474,3 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         return image_bytes
 
 
-def create_fusion_brain_image_generator() -> FusionBrainImageGenerator:
-    """
-    Фабричная функция для создания генератора изображений Fusion Brain.
-    
-    Создает и конфигурирует экземпляр FusionBrainImageGenerator
-    с настройками из конфигурации приложения.
-    
-    Returns:
-        FusionBrainImageGenerator: Настроенный генератор изображений
-        
-    Raises:
-        ValueError: Если API ключи не настроены в конфигурации
-        
-    Note:
-        Проверяет наличие FUSION_BRAIN_API_KEY и FUSION_BRAIN_SECRET_KEY
-        в переменных окружения перед созданием генератора.
-    """
-    if not config.FUSION_BRAIN_API_KEY or not config.FUSION_BRAIN_SECRET_KEY:
-        raise ValueError(
-            "FUSION_BRAIN_API_KEY и FUSION_BRAIN_SECRET_KEY должны быть установлены в .env файле"
-        )
-    
-    return FusionBrainImageGenerator(
-        api_key=config.FUSION_BRAIN_API_KEY,
-        secret_key=config.FUSION_BRAIN_SECRET_KEY,
-        api_url=config.FUSION_BRAIN_API_URL,
-        pipeline_id="",  # Будет получен динамически при первой генерации
-        timeout=config.FUSION_BRAIN_TIMEOUT,
-        poll_interval=config.FUSION_BRAIN_POLL_INTERVAL,
-        max_poll_attempts=config.FUSION_BRAIN_MAX_POLL_ATTEMPTS,
-    )

@@ -3,38 +3,21 @@
 
 Данный модуль предоставляет интерфейсы и реализации для создания
 карточек различными способами:
-- PlaywrightCardGenerator: генерация с помощью браузера и Jinja2 шаблонов
-- PILCardGenerator: генерация с помощью библиотеки Pillow (PIL)
-- HTTPServerManager: управление HTTP-сервером для обслуживания шаблонов
+- PillowCardGenerator: генерация с помощью библиотеки Pillow (PIL)
 
 Модуль поддерживает создание карточек для различных платформ
 включая Telegram, ВКонтакте и веб-сайты.
 """
 
 import logging
-import asyncio
-import aiohttp
-from aiohttp import web
-import threading
-import socket
-import os
-from pathlib import Path
-import aiofiles
-import time
-import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Tuple, List
-import textwrap
+from typing import Tuple, List
 import re
 import io
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor, ImageOps
-from playwright.async_api import Browser, BrowserContext, Page
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from config import config
-from bot.app import dp
+from PIL import Image, ImageDraw, ImageFont, ImageColor
 
-TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+from dtos import CardData, RenderParameters
 
 logger = logging.getLogger(__name__)
 
@@ -50,17 +33,15 @@ class BaseCardGenerator(ABC):
     @abstractmethod
     async def render_card(
         self,
-        template_name: str,
-        data: Dict,
-        size: Tuple[int, int],
+        parameters: RenderParameters,
+        data: CardData,
     ) -> bytes:
         """
-        Генерация карточки по шаблону с заданными данными.
+        Генерация карточки по шаблону.
         
         Args:
-            template_name (str): Имя HTML шаблона для рендеринга
-            data (Dict): Данные для подстановки в шаблон
-            size (Tuple[int, int]): Размер карточки (ширина, высота)
+            paremeters (RenderParameters): Параметры для рендеринга
+            data (CardData): Данные для подстановки в шаблон
             
         Returns:
             bytes: Изображение карточки в формате PNG
@@ -71,188 +52,7 @@ class BaseCardGenerator(ABC):
         pass
 
 
-class PlaywrightCardGenerator(BaseCardGenerator):
-    """
-    Генератор карточек с использованием Playwright и Jinja2.
-    
-    Использует браузерную автоматизацию для создания карточек
-    на основе HTML шаблонов с Jinja2. Подходит для сложных
-    дизайнов с CSS и JavaScript.
-    """
-
-    def __init__(self, browser: Browser):
-        """
-        Инициализация генератора карточек Playwright.
-        
-        Args:
-            browser (Browser): Экземпляр браузера Playwright
-        """
-        self.browser = browser
-        
-        # Настройка окружения Jinja2 для загрузки HTML шаблонов
-        self.jinja_env = Environment(
-            loader=FileSystemLoader(TEMPLATES_DIR),
-            autoescape=select_autoescape(['html', 'xml'])
-        )
-        logger.info(f"Jinja2 окружение настроено для {TEMPLATES_DIR.resolve()}")
-
-    
-    async def render_card(
-        self,
-        template_name: str,
-        data: Dict,
-        size: Tuple[int, int],
-    ) -> bytes:
-        """
-        Генерация карточки в изолированном контексте с использованием HTTP-сервера.
-        
-        Создает карточку с помощью браузера, используя временный HTTP-сервер
-        для корректной загрузки ресурсов (изображений, стилей, шрифтов).
-        
-        Args:
-            template_name (str): Имя HTML шаблона без расширения
-            data (Dict): Данные для подстановки в шаблон
-            size (Tuple[int, int]): Размер карточки (ширина, высота)
-            
-        Returns:
-            bytes: Скриншот карточки в формате PNG
-            
-        Raises:
-            Exception: При ошибке генерации или недоступности браузера
-        """
-        context: BrowserContext | None = None
-        page: Page | None = None
-        temp_file_path: Path | None = None
-        
-        try:
-            if not self.browser.is_connected():
-                logger.error("Браузер отключен! Невозможно создать карточку.")
-                raise Exception("Браузер не подключен.")
-
-            # Закрываем предыдущий контекст если есть
-            last_context: BrowserContext = dp.get("browser_context")
-            if last_context:
-                await last_context.close()
-
-            # Создаем новый контекст и страницу
-            context = await self.browser.new_context()
-            dp["browser_context"]: BrowserContext = context
-            
-            page = await context.new_page()
-
-            # Определяем размер
-            width, height = size
-            
-            # Значения по умолчанию для шаблона
-            defaults = {
-                'title': 'Контент от НКО',
-                'subtitle': '',
-                'content': '',
-                'footer': 'НКО',
-                'primary_color': '#667eea',
-                'secondary_color': '#764ba2',
-                'text_color': '#333',
-                'background_color': '#f5f7fa',
-                'org_name': 'НКО',
-                'contact_info': '',
-                'stats': [],
-                'cta_text': '',
-                'cta_link': '#'
-            }
-
-            # Объединяем данные пользователя с defaults
-            template_data = {**defaults, **data}
-
-            # Логирование данных шаблона для отладки
-            logger.info("=== JINJA2 ДАННЫЕ ШАБЛОНА ===")
-            for key, value in template_data.items():
-                if key == 'background_image' and isinstance(value, str) and len(value) > 100:
-                    logger.info(f"{key}: [base64 изображение, {len(value)} символов]")
-                else:
-                    logger.info(f"{key}: '{value}' (тип: {type(value).__name__})")
-
-            # Проверка критических переменных
-            critical_vars = ['title', 'content', 'org_name']
-            for var in critical_vars:
-                if not template_data.get(var):
-                    logger.warning(f"Критическая переменная '{var}' пуста или отсутствует!")
-
-            # Получаем шаблон Jinja и рендерим его
-            template_filename = template_name + ".html"
-            template = self.jinja_env.get_template(template_filename)
-            html_content = template.render(template_data)
-
-            # Логирование информации для отладки
-            logger.info(f"Jinja2 шаблон: {template_filename}")
-            logger.info(f"Ключи данных шаблона: {list(template_data.keys())}")
-            logger.info(f"Длина HTML контента: {len(html_content)} символов")
-
-            # Логирование первых 1000 символов HTML для отладки
-            logger.info(f"Превью HTML контента: {html_content[:1000]}...")
-            if 'Карточка' not in html_content and template_data.get('title'):
-                logger.warning("Отсутствие заголовка в HTML!")
-            if 'НКО' not in html_content and template_data.get('org_name'):
-                logger.warning("Отсутствие названия организации в HTML!")
-
-            # Создание временного HTML файла для корректной загрузки ресурсов
-            unique_id = str(int(time.time() * 1000)) + str(uuid.uuid4())[:8]
-            temp_filename = f"temp_card_{unique_id}.html"
-            temp_file_path = TEMPLATES_DIR / temp_filename
-
-            # Запись HTML в файл
-            async with aiofiles.open(temp_file_path, 'w', encoding='utf-8') as f:
-                await f.write(html_content)
-
-            logger.info(f"Создан временный файл: {temp_filename}")
-            
-            # Настройка размера viewport
-            await page.set_viewport_size({"width": width, "height": height})
-            
-            # Загрузка HTML через HTTP для корректной загрузки ресурсов
-            await page.goto(f"http://localhost:8000/{temp_filename}", wait_until="networkidle")
-            
-            # Ожидание загрузки всех ресурсов
-            await page.wait_for_load_state("networkidle")
-            
-            # Создание скриншота
-            screenshot_bytes = await page.screenshot(
-                type='png',
-                full_page=False
-            )
-            
-            logger.info(f"Успешно сгенерирован скриншот для {template_name}")
-            return screenshot_bytes
-            
-        except Exception as e:
-            logger.error(f"Ошибка генерации карточки '{template_name}': {e}")
-            raise # Пробрасываем ошибку выше для обработки хендлером
-            
-        finally:
-            # Закрываем страницу и контекст, освобождая ресурсы
-            if page:
-                await page.close()
-            if context:
-                await context.close()
-            # Удаление временного файла
-            if temp_file_path and temp_file_path.exists():
-                try:
-                    temp_file_path.unlink()
-                    logger.info(f"Удален временный файл: {temp_file_path.name}")
-                except Exception as e:
-                    logger.warning(f"Не удалось удалить временный файл {temp_file_path}: {e}")
-
-            # Удаление временного фонового изображения если оно было указано
-            if data.get("background_image_path"):
-                try:
-                    bg_image_path = Path(data["background_image_path"])
-                    if bg_image_path.exists():
-                        bg_image_path.unlink()
-                        logger.info(f"Удалено временное фоновое изображение: {bg_image_path.name}")
-                except Exception as e:
-                    logger.warning(f"Не удалось удалить временное фоновое изображение {data.get('background_image_path')}: {e}")
-
-
-class PILCardGenerator(BaseCardGenerator):
+class PillowCardGenerator(BaseCardGenerator):
     """
     Генератор карточек с использованием Pillow (PIL).
     """
@@ -264,7 +64,7 @@ class PILCardGenerator(BaseCardGenerator):
         # Попытка загрузить шрифты из системы
         self._load_fonts()
 
-        logger.info("PILCardGenerator инициализирован")
+        logger.info("PillowCardGenerator инициализирован")
 
     def _load_fonts(self):
         """
@@ -309,26 +109,12 @@ class PILCardGenerator(BaseCardGenerator):
 
             logger.info(f"Шрифты загружены: regular={self.regular_font_path}, bold={self.bold_font_path}")
 
-            # Тестирование загрузки шрифтов
-            try:
-                if self.regular_font_path:
-                    test_font = self._get_font(12, False)
-                    # Тестирование с кириллицей
-                    test_bbox = test_font.getbbox("Тест")
-                    logger.info(f"Шрифт regular протестирован: bbox={test_bbox}")
-
-                if self.bold_font_path:
-                    test_font_bold = self._get_font(12, True)
-                    test_bbox_bold = test_font_bold.getbbox("Тест")
-                    logger.info(f"Шрифт bold протестирован: bbox={test_bbox_bold}")
-
-            except Exception as e:
-                logger.warning(f"Ошибка при тестировании шрифтов: {e}")
-
         except Exception as e:
             logger.warning(f"Ошибка при загрузке шрифтов: {e}")
             self.regular_font_path = None
             self.bold_font_path = None
+            raise
+
 
     def _get_font(self, size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
         """
@@ -502,9 +288,8 @@ class PILCardGenerator(BaseCardGenerator):
 
     async def render_card(
         self,
-        template_name: str,
-        data: Dict,
-        size: Tuple[int, int],
+        parameters: RenderParameters,
+        data: CardData,
     ) -> bytes:
         """
         Генерация карточки с помощью Pillow.
@@ -515,9 +300,8 @@ class PILCardGenerator(BaseCardGenerator):
         - Поддержку Markdown форматирования
         
         Args:
-            template_name (str): Имя шаблона ('telegram_post' для специальных Telegram карточек)
-            data (Dict): Данные для карточки
-            size (Tuple[int, int]): Размер карточки (ширина, высота)
+            parameters (RenderParameters): Параметры для генерации
+            data (CardData): Данные для карточки
             
         Returns:
             bytes: Изображение карточки в формате PNG
@@ -525,13 +309,9 @@ class PILCardGenerator(BaseCardGenerator):
         Raises:
             Exception: При ошибке генерации карточки
         """
-        # Проверяем, является ли это запросом на генерацию Telegram-карточки
-        if template_name == 'telegram_post':
-            return await self._render_telegram_card(data, size)
-
         # Стандартная генерация PIL-карточки
+
         try:
-            width, height = size
 
             # Получение данных с значениями по умолчанию
             defaults = {
@@ -945,142 +725,3 @@ class PILCardGenerator(BaseCardGenerator):
             current_x += bbox[2] - bbox[0] + 4
 
 
-class HTTPServerManager:
-    """
-    Менеджер HTTP-сервера для обслуживания шаблонов Playwright.
-    
-    Запускает простой HTTP-сервер в отдельном потоке для
-    обслуживания HTML шаблонов и статических ресурсов,
-    которые нужны Playwright для корректной работы.
-    """
-
-    def __init__(self, templates_dir: Path, port: int = 8000):
-        """
-        Инициализация менеджера HTTP-сервера.
-        
-        Args:
-            templates_dir (Path): Директория с шаблонами
-            port (int): Порт для сервера
-        """
-        self.templates_dir = templates_dir
-        self.port = port
-        self.server_thread = None
-        self.server = None
-        self.loop = None
-
-    def _check_port_available(self) -> bool:
-        """
-        Проверка доступности порта.
-        
-        Returns:
-            bool: True если порт свободен
-        """
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.bind(('127.0.0.1', self.port))
-                sock.close()
-                return True
-        except OSError:
-            return False
-
-    async def _start_http_server_async(self):
-        """
-        Запуск HTTP-сервера в асинхронном режиме.
-        
-        Создает простой HTTP сервер для обслуживания статических
-        файлов и HTML шаблонов для Playwright.
-        """
-        async def handle_request(request):
-            """Обработчик HTTP запросов."""
-            file_path = self.templates_dir / request.match_info['filename']
-
-            # Проверка безопасности - файл должен быть в templates_dir
-            if not str(file_path).startswith(str(self.templates_dir)):
-                return web.Response(status=403, text="Доступ запрещен")
-
-            if not file_path.exists():
-                return web.Response(status=404, text="Файл не найден")
-
-            try:
-                with open(file_path, 'rb') as f:
-                    content = f.read()
-
-                # Определение MIME-типа и charset
-                if file_path.suffix.lower() == '.html':
-                    content_type = 'text/html'
-                    charset = 'utf-8'
-                elif file_path.suffix.lower() == '.css':
-                    content_type = 'text/css'
-                    charset = 'utf-8'
-                elif file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif']:
-                    content_type = 'image/' + file_path.suffix[1:].lower()
-                    charset = None
-                elif file_path.suffix.lower() == '.svg':
-                    content_type = 'image/svg+xml'
-                    charset = None
-                else:
-                    content_type = 'application/octet-stream'
-                    charset = None
-
-                if charset:
-                    return web.Response(body=content, content_type=content_type, charset=charset)
-                else:
-                    return web.Response(body=content, content_type=content_type)
-
-            except Exception as e:
-                logger.error(f"Ошибка обслуживания {file_path}: {e}")
-                return web.Response(status=500, text="Внутренняя ошибка сервера")
-
-        app = web.Application()
-        app.router.add_get('/{filename:.*}', handle_request)
-
-        runner = web.AppRunner(app)
-        await runner.setup()
-
-        site = web.TCPSite(runner, '127.0.0.1', self.port)
-        await site.start()
-
-        logger.info(f"HTTP-сервер запущен на http://127.0.0.1:{self.port} для директории {self.templates_dir}")
-
-        # Сохранение ссылок для остановки
-        self.server = runner
-        self.site = site
-
-        # Бесконечный цикл поддержания сервера
-        try:
-            while True:
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            await runner.cleanup()
-            logger.info("HTTP-сервер остановлен")
-
-    def start_in_thread(self):
-        """
-        Запуск HTTP-сервера в отдельном потоке.
-        
-        Returns:
-            bool: True если сервер успешно запущен
-        """
-        if not self._check_port_available():
-            logger.warning(f"Порт {self.port} уже занят. HTTP-сервер не запущен.")
-            return False
-
-        def run_server():
-            """Функция для запуска сервера в потоке."""
-            try:
-                asyncio.run(self._start_http_server_async())
-            except Exception as e:
-                logger.error(f"Ошибка запуска HTTP-сервера: {e}")
-
-        self.server_thread = threading.Thread(target=run_server, daemon=True)
-        self.server_thread.start()
-        logger.info(f"HTTP-сервер запущен в потоке на порту {self.port}")
-        return True
-
-    async def stop(self):
-        """
-        Остановка HTTP-сервера.
-        """
-        if self.server:
-            await self.server.cleanup()
-            logger.info("HTTP-сервер остановлен")

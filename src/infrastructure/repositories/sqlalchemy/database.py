@@ -1,13 +1,14 @@
 """
-Конфигурация базы данных
+Конфигурация базы данных SqlAlchemy
 """
 import logging
+from typing import Any, Generator
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
-from infrastructure.repositories.models import Base
-from infrastructure.repositories.models.ngo import NGO
+from infrastructure.repositories.sqlalchemy.models import Base
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class Database:
     Класс для управления подключением к базе данных
     """
     
-    def __init__(self, database_url: str = "sqlite:///./ngo_data.db"):
+    def __init__(self, database_url: str = "sqlite:///./sqlite3.db"):
         self.database_url = database_url
         self.engine = None
         self.SessionLocal = None
@@ -50,7 +51,7 @@ class Database:
             logger.error(f"Ошибка инициализации базы данных: {e}")
             raise
     
-    def get_session(self) -> Session:
+    def get_session(self) -> Generator[Any, Any, None]:
         """
         Получить сессию базы данных
         """

@@ -2,17 +2,47 @@ import logging
 from pathlib import Path
 
 from aiogram import Router, F
-from aiogram.filters import CommandStart, Command
-from aiogram.types import FSInputFile, Message
+from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
+from aiogram.types import FSInputFile, Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
-from bot.states import ContentGeneration, NGOInfo
-from bot.keyboards.inline import get_main_menu_keyboard
-from bot.app import dp
+from bot import dispatcher
+from bot.handlers.callbacks import IMAGE_GENERATION_KEYBOARD
+from bot.handlers.image_generation import GENERATE_IMAGES_CALLBACK_DATA
+from bot.handlers.ngo_info import VIEW_NGO_INFO_CALLBACK_DATA
+from models import Ngo
+from services.ngo_service import NGOService
 
 logger = logging.getLogger(__name__)
 
 start_router = Router(name="start")
+
+ASSETS_BASE_DIR_PATH = Path(__file__).resolve().parent.parent
+ABOUT_PHOTO_PATH = ASSETS_BASE_DIR_PATH / 'assets' / 'about.png'
+
+ABOUT_PHOTO = FSInputFile(path=ABOUT_PHOTO_PATH)
+
+
+START_MENU_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="📝 Создание контента", callback_data="create_content_wizard")],
+        [InlineKeyboardButton(text="📅 Управление контент-планами", callback_data="content_plan")],
+        [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data="edit_text")],
+        [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data=GENERATE_IMAGES_CALLBACK_DATA)],
+        [InlineKeyboardButton(text="📋 Информация о НКО", callback_data=VIEW_NGO_INFO_CALLBACK_DATA)],
+    ]
+)
+
+BACK_TO_START_KEYBOARD_CALLBACK_DATA = "back_to_start_menu"
+
+BACK_TO_START_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Вернуться в главное меню", callback_data=BACK_TO_START_KEYBOARD_CALLBACK_DATA)],
+    ]
+)
+
+# TODO: реализуй обработку возвращения в главное меню
 
 
 @start_router.message(CommandStart())
@@ -21,139 +51,34 @@ async def start_handler(message: Message, state: FSMContext):
     await state.clear()
     
     # Проверяем наличие данных об НКО в БД
-    ngo_service = dp["ngo_service"]
-    user_id = message.from_user.id
-    
+    ngo_service: NGOService = dispatcher["ngo_service"]
+    user_id: int = message.from_user.id
+
+    welcome_text = "👋 Привет! Я — Публикун, ваш AI-ассистент для создания контента в НКО.\n\n"
+
     if ngo_service.ngo_exists(user_id):
         # Если у пользователя есть данные НКО в БД, получаем их
-        ngo_data = ngo_service.get_ngo_data(user_id)
-        if ngo_data:
-            ngo_name = ngo_data.get("ngo_name", "")
-            welcome_text = (
-                f"👋 Привет! Я — Публикун, ваш AI-ассистент для создания контента в НКО.\n\n"
-                f"🏢 У вас заполнена информация о НКО: {ngo_name}\n"
-                f"Теперь я могу создавать персонализированный контент с упоминанием вашей организации.\n\n"
-                f"📋 Доступные команды:\n"
-                f"• /start — текущее меню\n"
-                f"• /menu — меню действий\n"
-                f"• /cancel — отменить текущее действие\n\n"
-                f"Что вы хотите сделать?"
-            )
-        else:
-            welcome_text = (
-                "👋 Привет! Я — Публикун, ваш AI-ассистент для создания контента в НКО.\n\n"
-                "Я помогу вам подготовить профессиональные посты и карточки для соцсетей за пару минут.\n\n"
-                "📋 Доступные команды:\n"
-                "• /start — текущее меню\n"
-                "• /menu — меню действий\n"
-                "• /cancel — отменить текущее действие\n\n"
-                "Что вы хотите сделать?"
-            )
+        ngo_data: Ngo = ngo_service.get_ngo_data_by_user_id(user_id)
+        ngo_name: str = ngo_data.name
+        welcome_text += (
+            f"🏢 У вас заполнена информация о НКО:\n"
+            f"{ngo_name}\n\n"
+            "Я могу создавать персонализированный контент с упоминанием вашей организации.\n\n"
+        )
+
     else:
-        welcome_text = (
-            "👋 Привет! Я — Публикун, ваш AI-ассистент для создания контента в НКО.\n\n"
-            "Я помогу вам подготовить профессиональные посты и карточки для соцсетей за пару минут.\n\n"
-            "📋 Доступные команды:\n"
-            "• /start — текущее меню\n"
-            "• /menu — меню действий\n"
-            "• /cancel — отменить текущее действие\n\n"
-            "Что вы хотите сделать?"
-        )
-    BASE_DIR = Path(__file__).resolve().parent
-    image_path = BASE_DIR / 'img' / 'logo.png'
-    # Создайте InputFile из файла
-    photo = FSInputFile(path=image_path)
+        welcome_text += "Я помогу вам подготовить профессиональные посты и карточки для соцсетей за пару минут.\n\n"
+
+    welcome_text += (
+        "📋 Доступные команды:\n"
+        "• /start — текущее меню\n\n"
+        "Что вы хотите сделать?"
+    )
 
     await message.answer_photo(
-        photo=photo,
+        photo=ABOUT_PHOTO,
         caption=welcome_text,
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=START_MENU_KEYBOARD,
         )
 
 
-
-@start_router.message(Command("menu"))
-async def main_menu_handler(message: Message, state: FSMContext):
-    """Обработчик команды /menu - показ главного меню с inline кнопками."""
-    # Проверяем наличие данных об НКО в БД
-    ngo_service = dp["ngo_service"]
-    user_id = message.from_user.id
-    
-    menu_text = "👋 Главное меню\n\nЧто вы хотите сделать?"
-    
-    # Проверяем, есть ли у пользователя данные НКО
-    if ngo_service.ngo_exists(user_id):
-        ngo_data = ngo_service.get_ngo_data(user_id)
-        if ngo_data:
-            ngo_name = ngo_data.get("ngo_name", "")
-            menu_text = f"👋 Главное меню\n\n🏢 Ваша НКО: {ngo_name}\n\nЧто вы хотите сделать?"
-    
-    BASE_DIR = Path(__file__).resolve().parent
-    image_path = BASE_DIR / 'img' / 'logo.png'
-    # Создайте InputFile из файла
-    photo = FSInputFile(path=image_path)
-
-    await message.answer_photo(
-        photo=photo,
-        caption=menu_text,
-        reply_markup=get_main_menu_keyboard(),
-        )
-
-
-@start_router.message(Command("cancel"))
-async def cancel_handler(message: Message, state: FSMContext):
-    """Команда для сброса текущего сценария."""
-    await state.clear()
-    await message.answer(
-        "❎ Текущий сценарий сброшен.\n\nЧто вы хотите сделать?",
-        reply_markup=get_main_menu_keyboard(),
-    )
-    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
-
-
-@start_router.message(F.text == "💭 Создать контент (свободная форма)")
-async def free_form_content_handler(message: Message, state: FSMContext):
-    """Обработчик для создания контента в свободной форме."""
-    await state.clear()
-    await state.update_data(generation_mode="free_form", has_ngo_info=False)
-    
-    await message.answer(
-        "💭 Понятно! Используем свободную форму создания.\n\n"
-        "Для создания персонализированного контента с данными НКО - выберите 'Да'.\n"
-        "Или продолжите без данных НКО - выберите 'Нет'.",
-        reply_markup=get_yes_no_keyboard(),
-    )
-    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
-
-
-@start_router.message(F.text == "✏️ Редактировать контент")
-async def edit_text_handler(message: Message, state: FSMContext):
-    """Обработчик для создания контента в свободной форме."""
-    await state.clear()
-    await state.update_data(edit_text=True, has_ngo_info=False)
-
-    await message.answer(
-        "✏️ Хорошо! Редактируем исходный текст.\n\n"
-        "Для создания персонализированного контента с данными НКО - выберите 'Да'.\n"
-        "Или продолжите без данных НКО - выберите 'Нет'.",
-        reply_markup=get_yes_no_keyboard(),
-    )
-    await state.set_state(ContentGeneration.waiting_for_ngo_info_choice)
-
-
-@start_router.message(F.text == "📋 Посмотреть мою НКО")
-async def view_ngo_handler(message: Message, state: FSMContext):
-    """Обработчик для просмотра информации об НКО."""
-    from bot.handlers.ngo_info import view_ngo_info_handler as view_handler
-    await view_handler(message, state)
-
-
-@start_router.message(F.text == "🔄 Обновить данные НКО")
-async def update_ngo_handler(message: Message, state: FSMContext):
-    """Обработчик для обновления данных НКО."""
-    from bot.handlers.ngo_info import update_ngo_info_handler as update_handler
-    await update_handler(message, state)
-
-
-# Дополнительные импорты для кнопок yes/no
-from bot.keyboards.reply import get_yes_no_keyboard

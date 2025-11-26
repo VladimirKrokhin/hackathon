@@ -1,16 +1,14 @@
 import logging
-from typing import Dict, Union
 
-from infrastructure.prompt_builder import AbstractPromptBuilder, PromptContext, PlanPromptContext, EditPromptContext
+from infrastructure.prompt_builder import AbstractPromptBuilder
+from dtos import PromptContext
 from infrastructure.response_processor import AbstractResponseProcessor
 from infrastructure.gpt import AbstractGPT
 
 logger = logging.getLogger(__name__)
 
-
-
-class TextContentGenerationService:
-    """Cервис генерации текстового контента медиа."""
+class TextGenerationService:
+    """Сервис генерации текстового контента медиа."""
 
     SYSTEM_PROMPT = (
         "Вы — профессиональный SMM-менеджер для НКО, "
@@ -24,7 +22,7 @@ class TextContentGenerationService:
         "используй их БЕЗ восклицательных знаков, как есть. "
         "Восклицательные знаки нужны только для напоминания пользователю подставить данные, "
         "когда сами данные отсутствуют. "
-        "Если нужно, можете добавлять емодзи, такие как ✅. "
+        "Если нужно, можете добавлять эмодзи, такие как ✅. "
         "Дополнительные требования: "
         "• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение. "
         "• Фокусируйся на социальной миссии и помощи людям."
@@ -32,26 +30,22 @@ class TextContentGenerationService:
 
     def __init__(
         self,
-        *,
         prompt_builder: AbstractPromptBuilder,
         gpt_client: AbstractGPT,
         response_processor: AbstractResponseProcessor,
-    ):
-        self.prompt_builder = prompt_builder
-        self.gpt_client = gpt_client
-        self.response_processor = response_processor
+    ) -> None:
+        self.prompt_builder: AbstractPromptBuilder = prompt_builder
+        self.gpt_client: AbstractGPT = gpt_client
+        self.response_processor: AbstractResponseProcessor = response_processor
 
-    async def generate_text_content(
-        self, user_data: Union[Dict, PromptContext], user_text: str
+    async def generate_text(
+        self,
+        context: PromptContext,
+        user_prompt: str
     ) -> str:
-        context = (
-            user_data
-            if isinstance(user_data, PromptContext)
-            else PromptContext.from_dict(user_data or {})
-        )
         logger.info(f"Генерация нового контента для цели: {context.goal}")
 
-        prompt = self.prompt_builder.build_text_content_prompt(context, user_text)
+        prompt = self.prompt_builder.build_text_content_prompt(context, user_prompt)
         logger.info(f"Сформирован промпт длиной {len(prompt)} символов")
 
         raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
@@ -60,22 +54,19 @@ class TextContentGenerationService:
         logger.info(f"Успешно сгенерирован контент длиной {len(generated_text)} символов")
         return generated_text
 
-    async def refactor_text_content(
+    # TODO: Разберись что использовать: refactor_text() или edit_text()
+
+    async def refactor_text(
         self,
-        user_data: Union[Dict, PromptContext],
-        generated_post: str,
-        user_text: str,
+        context: PromptContext,
+        post_to_edit: str,
+        user_prompt: str,
     ) -> str:
         """Редактирование существующего контента по запросу пользователя."""
-        context = (
-            user_data
-            if isinstance(user_data, PromptContext)
-            else PromptContext.from_dict(user_data or {})
-        )
         logger.info(f"Редактирование контента для цели: {context.goal}")
 
         prompt = self.prompt_builder.build_refactor_text_content_prompt(
-            context, generated_post, user_text
+            context, post_to_edit, user_prompt
         )
         logger.info(f"Сформирован промпт для редактирования длиной {len(prompt)} символов")
 
@@ -87,37 +78,11 @@ class TextContentGenerationService:
         )
         return refactored_text
 
-    async def generate_content_plan(
-        self,
-        user_data: Union[Dict, PlanPromptContext]
-    ) -> str:
-        context = (
-            user_data
-            if isinstance(user_data, PlanPromptContext)
-            else PlanPromptContext.from_dict(user_data or {})
-        )
-
-        logger.info(f"Генерация контент-плана.")
-
-        prompt = self.prompt_builder.build_content_plan_prompt(context)
-        logger.info(f"Сформирован промпт длиной {len(prompt)} символов")
-
-        raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
-        generated_text = self.response_processor.process_response(raw_response)
-
-        logger.info(f"Успешно сгенерирован контент-план длиной {len(generated_text)} символов")
-        return generated_text
 
     async def edit_text(
         self,
-        user_data: Union[Dict, EditPromptContext]
+        context
     ) -> str:
-        context = (
-            user_data
-            if isinstance(user_data, EditPromptContext)
-            else EditPromptContext.from_dict(user_data or {})
-        )
-
         logger.info(f"Редактирование текста пользователя.")
 
         prompt = self.prompt_builder.build_edit_text_prompt(context)
@@ -129,22 +94,6 @@ class TextContentGenerationService:
         logger.info(f"Успешно сгенерирован исправленный вариант длиной {len(generated_text)} символов")
         return generated_text
 
-    async def generate_card_content(
-        self, user_data: Union[Dict, PromptContext], full_content: str
-    ) -> str:
-        """Генерация сокращенного контента специально для карточки (1-2 предложения)."""
-        context = (
-            user_data
-            if isinstance(user_data, PromptContext)
-            else PromptContext.from_dict(user_data or {})
-        )
-        logger.info(f"Генерация контента для карточки на основе текста длиной {len(full_content)} символов")
 
-        prompt = self.prompt_builder.build_card_content_prompt(context, full_content)
-        logger.info(f"Сформирован промпт для карточки длиной {len(prompt)} символов")
 
-        raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
-        card_text = self.response_processor.process_response(raw_response)
 
-        logger.info(f"Успешно сгенерирован контент для карточки длиной {len(card_text)} символов")
-        return card_text

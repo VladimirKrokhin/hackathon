@@ -35,7 +35,7 @@ class AbstractGPT(ABC):
     @property
     @abstractmethod
     def model_name(self) -> str:
-        """Получить человекочитаемое имя модели.
+        """Получить имя модели.
 
         Returns:
             str: Имя модели

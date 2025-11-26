@@ -1,14 +1,35 @@
 import logging
 from aiogram import Router, F
+from aiogram.enums import ParseMode
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
-from bot.app import dp
-from bot.keyboards.inline import get_content_plan_menu_keyboard, get_main_menu_keyboard
+from bot.handlers.start import start_handler
 from services.content_plan_service import ContentPlanService
+
+from bot import dispatcher
 
 logger = logging.getLogger(__name__)
 content_plan_menu_router = Router(name="content_plan_menu")
+
+
+CONTENT_PLAN_MENU_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Посмотреть мои планы", callback_data="content_plan_view")],
+        [InlineKeyboardButton(text="➕ Создать новый план", callback_data="content_plan_create")],
+        [InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="content_plan_back")],
+    ]
+)
+
+CONTENT_PLAN_LIST_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        # Кнопка создания нового плана
+        [InlineKeyboardButton(text="➕ Создать новый план", callback_data="content_plan_create")],
+        # Кнопка возврата
+        [InlineKeyboardButton(text="⬅️ Назад в меню контент-планов", callback_data="content_plan")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="content_plan_back")],
+    ]
+)
 
 
 @content_plan_menu_router.callback_query(F.data == "content_plan")
@@ -18,11 +39,11 @@ async def content_plan_menu_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     
     # Получаем количество планов пользователя
-    content_plan_service: ContentPlanService = dp["content_plan_service"]
+    content_plan_service: ContentPlanService = dispatcher["content_plan_service"]
     user_id = callback.from_user.id
     
     try:
-        plans = await content_plan_service.get_user_plans(user_id)
+        plans = await content_plan_service.get_all_by_user_id(user_id)
         plans_count = len(plans) if plans else 0
         
         text = f"📅 *Управление контент-планами*\n\n"
@@ -33,15 +54,15 @@ async def content_plan_menu_handler(callback: CallbackQuery, state: FSMContext):
             # Если сообщение содержит фото, отправляем новое сообщение
             await callback.message.answer(
                 text=text,
-                reply_markup=get_content_plan_menu_keyboard(plans_count > 0),
-                parse_mode="Markdown"
+                reply_markup=CONTENT_PLAN_MENU_KEYBOARD,
+                parse_mode=ParseMode.MARKDOWN
             )
         else:
             # Если сообщение содержит текст, редактируем его
             await callback.message.edit_text(
                 text=text,
-                reply_markup=get_content_plan_menu_keyboard(plans_count > 0),
-                parse_mode="Markdown"
+                reply_markup=CONTENT_PLAN_MENU_KEYBOARD,
+                parse_mode=ParseMode.MARKDOWN
             )
         
     except Exception as e:
@@ -49,12 +70,12 @@ async def content_plan_menu_handler(callback: CallbackQuery, state: FSMContext):
         if callback.message.photo:
             await callback.message.answer(
                 "⚠️ Произошла ошибка при загрузке данных.\n\nВыберите действие:",
-                reply_markup=get_content_plan_menu_keyboard(False)
+                reply_markup=CONTENT_PLAN_MENU_KEYBOARD
             )
         else:
             await callback.message.edit_text(
                 "⚠️ Произошла ошибка при загрузке данных.\n\nВыберите действие:",
-                reply_markup=get_content_plan_menu_keyboard(False)
+                reply_markup=CONTENT_PLAN_MENU_KEYBOARD
             )
 
 
@@ -64,7 +85,6 @@ async def create_content_plan_handler(callback: CallbackQuery, state: FSMContext
     await callback.answer()
     
     # Перенаправляем к существующему обработчику создания планов
-    from bot.handlers.content_plan import start_content_plan
     await start_content_plan(callback.message, state)
 
 
@@ -73,11 +93,11 @@ async def view_content_plans_handler(callback: CallbackQuery, state: FSMContext)
     """Показать список существующих планов пользователя."""
     await callback.answer()
     
-    content_plan_service: ContentPlanService = dp["content_plan_service"]
-    user_id = callback.from_user.id
+    content_plan_service: ContentPlanService = dispatcher["content_plan_service"]
+    user_id: int = callback.from_user.id
     
     try:
-        plans = await content_plan_service.get_user_plans(user_id)
+        plans = await content_plan_service.get_all_by_user_id(user_id)
         
         if not plans:
             text = "📋 *Ваши контент-планы*\n\n"
@@ -86,8 +106,8 @@ async def view_content_plans_handler(callback: CallbackQuery, state: FSMContext)
             
             await callback.message.edit_text(
                 text=text,
-                reply_markup=get_content_plan_menu_keyboard(False),
-                parse_mode="Markdown"
+                reply_markup=CONTENT_PLAN_MENU_KEYBOARD,
+                parse_mode=ParseMode.MARKDOWN,
             )
             return
         
@@ -104,18 +124,30 @@ async def view_content_plans_handler(callback: CallbackQuery, state: FSMContext)
             text += f"   🆔 ID: `{plan.id}`\n\n"
         
         text += "Выберите план для управления:"
+
+        list_keyboard = CONTENT_PLAN_LIST_KEYBOARD.model_copy(deep=True)
+
+        for plan in plans:
+            status_text = "✅" if plan.is_active else "⏸️"
+            button_text = f"{status_text} {plan.plan_name}"
+            callback_data = f"content_plan_manage_{plan.id}"
+            list_keyboard.inline_keyboard.insert(
+                0,
+                [InlineKeyboardButton(text=button_text, callback_data=callback_data)],
+            )
+
         
         await callback.message.edit_text(
             text=text,
-            reply_markup=get_content_plan_list_keyboard(plans),
-            parse_mode="Markdown"
+            reply_markup=list_keyboard,
+            parse_mode=ParseMode.MARKDOWN
         )
         
     except Exception as e:
         logger.error(f"Ошибка при получении планов пользователя {user_id}: {e}")
         await callback.message.edit_text(
             "⚠️ Произошла ошибка при загрузке планов.",
-            reply_markup=get_content_plan_menu_keyboard(False)
+            reply_markup=CONTENT_PLAN_MENU_KEYBOARD
         )
 
 
@@ -124,25 +156,16 @@ async def back_to_main_menu_handler(callback: CallbackQuery, state: FSMContext):
     """Вернуться в главное меню."""
     await callback.answer()
     
-    from bot.handlers.start import main_menu_handler
-    await main_menu_handler(callback.message, state)
+    await start_handler(callback.message, state)
 
 
-def get_content_plan_list_keyboard(plans):
-    """Создать клавиатуру со списком планов."""
-    buttons = []
-    
-    for plan in plans:
-        status_text = "✅" if plan.is_active else "⏸️"
-        button_text = f"{status_text} {plan.plan_name}"
-        callback_data = f"content_plan_manage_{plan.id}"
-        buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
-    
-    # Кнопка создания нового плана
-    buttons.append([InlineKeyboardButton(text="➕ Создать новый план", callback_data="content_plan_create")])
-    
-    # Кнопка возврата
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад в меню контент-планов", callback_data="content_plan")])
-    buttons.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="content_plan_back")])
-    
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+
+
+
+
+
+
+
+

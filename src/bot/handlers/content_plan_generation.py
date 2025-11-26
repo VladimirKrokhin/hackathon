@@ -1,19 +1,17 @@
 import logging
 
 from aiogram import Router, F
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery
+from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums.parse_mode import ParseMode
 
-from bot.app import dp
+from bot import dispatcher
 from bot.states import ContentPlan
-from bot.keyboards.inline import (
-    get_period_keyboard,
-    get_frequency_keyboard,
-    get_skip_keyboard,
-)
-from services.content_generation import TextContentGenerationService
+from services.notification_service import NotificationService
+from services.text_generation import TextGenerationService
+from services.content_plan_service import ContentPlanService
+
+logger = logging.getLogger(__name__)
 
 # Константы для контент-плана
 PERIOD_OPTIONS = ["3 дня", "Неделя", "Месяц"]
@@ -22,7 +20,25 @@ CUSTOM_OPTION = "🖊️ Свой вариант"
 SKIP_OPTION = "⏩ Пропустить"
 
 content_plan_router = Router(name="content_plan")
-logger = logging.getLogger(__name__)
+
+
+
+FREQUENCY_KEYBOARD = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="каждый день", callback_data="frequency_daily")],
+            [InlineKeyboardButton(text="раз в два дня", callback_data="frequency_every_two_days")],
+            [InlineKeyboardButton(text="🖊️ Свой вариант", callback_data="frequency_custom")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_previous")]
+        ]
+    )
+
+SKIP_KEYBOARD = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"⏩ Пропустить", callback_data="skip_step")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_previous")]
+        ]
+    )
+
 
 
 async def generate_and_save_plan(message: Message, state: FSMContext, data: dict) -> None:
@@ -30,7 +46,7 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
     Общая функция для генерации и сохранения контент-плана
     """
     try:
-        text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
+        text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
         generated_plan = await text_generation_service.generate_content_plan(data)
 
         await message.answer(
@@ -39,7 +55,7 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
         )
 
         # Сохраняем план в базу данных
-        content_plan_service = dp["content_plan_service"]
+        content_plan_service: ContentPlanService = dispatcher["content_plan_service"]
         plan_id = await content_plan_service.save_content_plan(
             user_id=message.from_user.id,
             user_data=data,
@@ -58,11 +74,11 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
         )
 
         # Отправляем уведомление о создании плана
-        notification_service = dp["notification_service"]
-        plan = await content_plan_service.repository.get_plan_by_id(plan_id, message.from_user.id)
+        notification_service: NotificationService = dispatcher["notification_service"]
+        plan = content_plan_service.repository.get_by_id(plan_id, message.from_user.id)
         if plan:
             # Получаем количество элементов плана
-            items = await content_plan_service.repository.get_plan_items(plan_id, message.from_user.id)
+            items = content_plan_service.repository.get_plan_items(plan_id, message.from_user.id)
             item_count = len(items) if items else 0
             
             await notification_service.send_plan_created_notification(plan, item_count)
@@ -77,15 +93,6 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
         )
         raise error
 
-
-@content_plan_router.message(Command("contentplan"))
-async def start_content_plan(message: Message, state: FSMContext):
-    await message.answer(
-        "📅 Давайте создадим контент-план для ваших постов!\n\n"
-        "На какой период вы хотите подготовить план?",
-        reply_markup=get_period_keyboard(),
-    )
-    await state.set_state(ContentPlan.waiting_for_period)
 
 
 # === MESSAGE HANDLERS для обработки текстового ввода ===
@@ -103,10 +110,9 @@ async def custom_period_message_handler(message: Message, state: FSMContext):
 
     await state.update_data(period=period)
 
-    from bot.keyboards.inline import get_frequency_keyboard
     await message.answer(
         "🔁 Какая частота публикаций должна быть?",
-        reply_markup=get_frequency_keyboard(),
+        reply_markup=FREQUENCY_KEYBOARD,
     )
     await state.set_state(ContentPlan.waiting_for_frequency)
 
@@ -137,10 +143,9 @@ async def themes_message_handler(message: Message, state: FSMContext):
     themes = message.text.strip()
     await state.update_data(themes=themes)
 
-    from bot.keyboards.inline import get_skip_keyboard
     await message.answer(
         "🖋️ Укажите дополнительную информацию или требования.",
-        reply_markup=get_skip_keyboard(),
+        reply_markup=SKIP_KEYBOARD,
     )
     await state.set_state(ContentPlan.waiting_for_details)
 
@@ -182,10 +187,9 @@ async def period_callback_handler(callback: CallbackQuery, state: FSMContext, pe
     await callback.answer()
     await state.update_data(period=period)
 
-    from bot.keyboards.inline import get_frequency_keyboard
     await callback.message.answer(
         "🔁 Какая частота публикаций должна быть?",
-        reply_markup=get_frequency_keyboard(),
+        reply_markup=FREQUENCY_KEYBOARD,
     )
     await state.set_state(ContentPlan.waiting_for_frequency)
 

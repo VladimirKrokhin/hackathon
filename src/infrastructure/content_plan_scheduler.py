@@ -2,13 +2,13 @@
 Планировщик для автоматической проверки и отправки уведомлений
 """
 import logging
-from datetime import datetime
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from services.notification_service import NotificationService
-from infrastructure.database import get_db_session
 from config import config
+
 
 logger = logging.getLogger(__name__)
 
@@ -75,29 +75,18 @@ class ContentPlanScheduler:
         """
         Фоновая задача для проверки и отправки уведомлений
         """
+        logger.info("Запуск проверки уведомлений контент-планов")
+
+
         try:
-            logger.info("Запуск проверки уведомлений контент-планов")
-            
-            # Получаем сессию БД
-            db = next(get_db_session())
-            
-            try:
-                # Проверяем и отправляем уведомления
-                sent_count = await self.notification_service.check_and_send_notifications(db)
-                
-                if sent_count > 0:
-                    logger.info(f"Проверка уведомлений завершена. Отправлено: {sent_count}")
-                else:
-                    logger.debug("Проверка уведомлений завершена. Новых уведомлений нет")
-                    
-            except Exception as e:
-                logger.error(f"Ошибка при проверке уведомлений в фоновой задаче: {e}")
-            finally:
-                db.close()
-                
+            # Проверяем и отправляем уведомления
+            await self.notification_service.check_and_send_notifications()
+
         except Exception as e:
-            logger.error(f"Критическая ошибка в фоновой задаче проверки уведомлений: {e}")
-    
+            logger.error(f"Ошибка при проверке уведомлений в фоновой задаче: {e}")
+            raise
+
+
     def get_status(self) -> dict:
         """
         Получить статус планировщика
@@ -125,3 +114,4 @@ class ContentPlanScheduler:
                 "jobs": 0,
                 "error": str(e)
             }
+

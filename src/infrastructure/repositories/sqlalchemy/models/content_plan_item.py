@@ -1,22 +1,17 @@
 """
 Модель данных для элементов контент-планов (отдельных публикаций)
 """
-from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Enum as SQLEnum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-import enum
+
+from models import PublicationStatus, ContentPlanItem
 from . import Base
 
 
-class PublicationStatus(enum.Enum):
-    """Статусы публикации"""
-    SCHEDULED = "запланировано"
-    PUBLISHED = "опубликовано"
-    OVERDUE = "просрочено"
 
 
-class ContentPlanItem(Base):
+class SqlAlchemyContentPlanItemModel(Base):
     """
     Модель для хранения элементов контент-плана (отдельных публикаций)
     """
@@ -39,37 +34,37 @@ class ContentPlanItem(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="Дата обновления")
     
     # Связь с контент-планом
-    content_plan = relationship("ContentPlan", back_populates="items")
+    content_plan = relationship("SqlAlchemyContentPlanModel", back_populates="items")
     
     def __repr__(self) -> str:
         return f"<ContentPlanItem(id={self.id}, plan_id={self.content_plan_id}, title='{self.content_title}')>"
+
+    def to_domain_model(self) -> ContentPlanItem:
+        dto = ContentPlanItem(
+            id_=self.id,
+            content_plan_id=self.content_plan_id,
+            publication_date=self.publication_date,
+            content_title=self.content_title,
+            content_text=self.content_text,
+            status=self.status,
+            notification_sent=self.notification_sent,
+            notification_sent_at=self.notification_sent_at,
+        )
+
+        return dto
+
     
-    def to_dict(self) -> dict:
-        """Преобразование модели в словарь для удобства использования"""
-        return {
-            "id": self.id,
-            "content_plan_id": self.content_plan_id,
-            "publication_date": self.publication_date.isoformat() if self.publication_date else None,
-            "content_title": self.content_title,
-            "content_text": self.content_text,
-            "status": self.status.value if self.status else None,
-            "notification_sent": self.notification_sent,
-            "notification_sent_at": self.notification_sent_at.isoformat() if self.notification_sent_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
-    
+
     @classmethod
-    def from_dict(cls, data: dict) -> "ContentPlanItem":
-        """Создание объекта из словаря"""
-        status_value = data.get("status")
-        status = PublicationStatus(status_value) if status_value else PublicationStatus.SCHEDULED
-        
+    def from_domain_model(cls, dto: ContentPlanItem) -> "SqlAlchemyContentPlanItemModel":
+
         return cls(
-            content_plan_id=data.get("content_plan_id"),
-            publication_date=data.get("publication_date"),
-            content_title=data.get("content_title"),
-            content_text=data.get("content_text"),
-            status=status,
-            notification_sent=data.get("notification_sent", False),
+            id=dto.id_,
+            content_plan_id=dto.content_plan_id,
+            publication_date=dto.publication_date,
+            content_title=dto.content_title,
+            content_text=dto.content_text,
+            status=dto.status,
+            notification_sent=dto.notification_sent,
+            notification_sent_at=dto.notification_sent_at,
         )

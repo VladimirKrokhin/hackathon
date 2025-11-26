@@ -1,7 +1,10 @@
 from aiogram import Router
+
+from .ngo_info import ngo_info_router
 from .start import start_router
-from .wizard_handler import wizard_router
-from .content_plan import content_plan_router
+from .wizard_handler import create_content_wizard
+from .new_generation import  new_generation_router
+from .content_plan_generation import content_plan_router
 from .content_plan_menu import content_plan_menu_router
 from .callbacks import callbacks_router
 from .fallback import fallback_router
@@ -9,7 +12,9 @@ from .fallback import fallback_router
 # Создаем основной роутер и включаем в него все остальные роутеры
 router = Router()
 router.include_router(start_router)
-router.include_router(wizard_router)
+router.include_router(ngo_info_router)
+router.include_router(new_generation_router)
+router.include_router(create_content_wizard)
 router.include_router(content_plan_router)
 router.include_router(content_plan_menu_router)
 router.include_router(callbacks_router)
@@ -17,8 +22,4 @@ router.include_router(fallback_router)
 
 __all__ = [
     "router",
-    "start_router",
-    "wizard_router", 
-    "content_plan_router",
-    "content_plan_menu_router"
 ]

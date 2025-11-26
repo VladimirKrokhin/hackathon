@@ -6,8 +6,7 @@
 """
 
 import logging
-from typing import Callable, Awaitable, List
-from collections import defaultdict
+from typing import Callable, List
 
 logger = logging.getLogger(__name__)
 
