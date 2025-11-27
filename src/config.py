@@ -52,14 +52,7 @@ class Config(BaseSettings):
         description="Таймаут для запроса Yandex GPT"
     )
 
-    # Конфигурация Playwright
-    PLAYWRIGHT_TIMEOUT: int = Field(
-        default=60000, 
-        env="PLAYWRIGHT_TIMEOUT",
-        description="Таймаут для генерации Playwright в милисекундах"
-    )
-
-    # Конфигурация FusionBrain API 
+    # Конфигурация FusionBrain API
     FUSION_BRAIN_API_KEY: str = Field(
         default="", 
         env="FUSION_BRAIN_API_KEY",
@@ -100,7 +93,7 @@ class Config(BaseSettings):
 
     # Настройки уведомлений контент-плана
     NOTIFICATION_CHECK_INTERVAL: int = Field(
-        default=30, 
+        default=1,
         env="NOTIFICATION_CHECK_INTERVAL",
         description="Интервал проверки уведомлений в минутах"
     )

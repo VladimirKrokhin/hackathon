@@ -44,7 +44,7 @@ class NotificationService:
             item = self.repository.get_content_plan_item_by_id(item_id)
 
             item.notification_sent = True
-            item.notification_sent_at = datetime.utcnow()
+            item.notification_sent_at = datetime.now()
             # FIXME: !!!
             self.repository.update_item(item)
             logger.info(f"Отмечено уведомление для элемента {item_id}")

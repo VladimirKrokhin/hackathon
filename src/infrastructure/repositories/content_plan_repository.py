@@ -36,6 +36,10 @@ class AbstractContentPlanRepository(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def update_item(self, plan_item: ContentPlanItem) -> None:
+        pass
+
+    @abstractmethod
     def get_by_id(self, plan_id: int) -> ContentPlan:
         """
         Получить контент-план по ID
@@ -177,6 +181,27 @@ class SqlAlchemyContentPlanRepository(AbstractContentPlanRepository):
 
         return plan
 
+    def _update_content_plan_item_entry(self, plan_item: ContentPlanItem) -> SqlAlchemyContentPlanItemModel:
+        plan_item_id = plan_item.id_
+
+        if plan_item_id is None:
+            raise ValueError("ID плана None")
+
+        plan_item_model = self._get_content_plan_item_entry_by_id(plan_item_id)
+
+        plan_item_model.content_plan_id = plan_item.content_plan_id
+        plan_item_model.publication_date = plan_item.publication_date
+        plan_item_model.content_title = plan_item.content_title
+        plan_item_model.content_text = plan_item.content_text
+        plan_item_model.status = plan_item.status
+        plan_item_model.notification_sent = plan_item.notification_sent
+        plan_item_model.notification_sent_at = plan_item.notification_sent_at
+
+        self.session.commit()
+        self.session.refresh(plan_item_model)
+
+        return plan_item_model
+
     def _get_all_content_plan_entries_by_user_id(self, user_id: int) -> list[SqlAlchemyContentPlanModel]:
         query = self.session.query(SqlAlchemyContentPlanModel).filter(SqlAlchemyContentPlanModel.user_id == user_id)
         ordered_query = query.order_by(desc(SqlAlchemyContentPlanModel.created_at)).all()
@@ -208,21 +233,24 @@ class SqlAlchemyContentPlanRepository(AbstractContentPlanRepository):
     def update(self, plan_dto: ContentPlan) -> None:
         self._update_content_plan_entry(plan_dto)
 
+    def update_item(self, plan_item: ContentPlanItem) -> None:
+        self._update_content_plan_item_entry(plan_item)
+
     def get_by_id(self, plan_id: int) -> ContentPlan:
         """
         Получить контент-план по ID
         """
         content_plan = self._get_content_plan_entry_by_id(plan_id)
 
-        dto = content_plan.to_domain_model()
+        model = content_plan.to_domain_model()
 
-        return dto
+        return model
 
     def get_content_plan_item_by_id(self, item_id: int) -> ContentPlanItem:
         content_plan_item = self._get_content_plan_item_entry_by_id(item_id)
-        dto = content_plan_item.to_domain_model()
+        model = content_plan_item.to_domain_model()
 
-        return dto
+        return model
 
     def get_all_by_user_id(self, user_id: int) -> tuple[ContentPlan, ...]:
         """

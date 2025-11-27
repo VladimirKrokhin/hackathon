@@ -115,24 +115,20 @@ async def view_content_plans_handler(callback: CallbackQuery, state: FSMContext)
 
 
         for i, plan in enumerate(plans, 1):
-            status_emoji = "✅" if plan.is_active else "⏸️"
-            status_text = "активен" if plan.is_active else "приостановлен"
-
             text += (
                 f"{i}. *{plan.plan_name}*\n"
-                f"   📊 Статус: {status_emoji} {status_text}\n"
                 f"   📅 Период: {plan.period}\n"
-                f"   🆔 ID: `{plan.id}`\n\n"
+                f"   🆔 ID: `{plan.id_}`\n\n"
             )
 
         text += "Выберите план для управления:"
 
         list_keyboard = CONTENT_PLAN_LIST_KEYBOARD.model_copy(deep=True)
 
+        # FIXME: коллбэки не обрабатываются
         for plan in plans:
-            status_text = "✅" if plan.is_active else "⏸️"
-            button_text = f"{status_text} {plan.plan_name}"
-            callback_data = f"content_plan_manage_{plan.id}"
+            button_text = f"{plan.plan_name}"
+            callback_data = f"content_plan_manage_{plan.id_}"
             list_keyboard.inline_keyboard.insert(
                 0,
                 [InlineKeyboardButton(text=button_text, callback_data=callback_data)],

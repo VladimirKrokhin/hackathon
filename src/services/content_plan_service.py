@@ -229,7 +229,7 @@ class ContentPlanService:
             plan = self.repository.get_by_id(plan_id)
 
             # Генерируем расписание публикаций
-            await self._generate_schedule(plan.id_, generated_plan)
+            await self._generate_schedule(plan.id_, content_plan)
 
             logger.info(f"Контент-план {plan.id_} сохранен для пользователя {plan.user_id}")
             return plan.id_
@@ -262,7 +262,7 @@ class ContentPlanService:
     async def generate_content_plan(
             self,
             context: PlanPromptContext
-    ) -> str:
+    ) -> ContentPlan:
 
         logger.info(f"Генерация контент-плана.")
 
@@ -289,12 +289,11 @@ class ContentPlanService:
                     id_=None,  # Еще не сохранено в БД
                     content_plan_id=0,  # Будет присвоено после сохранения плана
                     publication_date=pub_date,
-                    content_title=item.get("content_title", "Без заголовка"),
-                    content_text=item.get("content_text", ""),
+                    content_title=item["content_title"],
+                    content_text=item["content_text"],
                     status=PublicationStatus.SCHEDULED,
                     notification_sent=False,
                     notification_sent_at=None
-                    # В dataclass поле может быть Optional, если нет - нужно добавить default=None или передать None
                 )
                 plan_items.append(content_item)
             except Exception as e:
@@ -306,14 +305,15 @@ class ContentPlanService:
 
         # Сборка итогового объекта ContentPlan
         # Используем данные из context для заполнения мета-информации
+
         content_plan = ContentPlan(
             id_=None,
             user_id=context.user_id,
-            plan_name=f"Контент-план: {context.topic}"[:100],  # Ограничение длины на всякий случай
-            period=context.period if hasattr(context, 'period') else "Не указан",
-            frequency=context.frequency if hasattr(context, 'frequency') else "Не указана",
-            topics=context.topic,
-            details=f"Сгенерировано для: {context.topic}",
+            plan_name=f"Контент-план: {context.themes}"[:100],  # Ограничение длины на всякий случай
+            period=context.period,
+            frequency=context.frequency,
+            topics=context.themes,
+            details=f"Сгенерировано для: {context.themes}",
             plan_data={"raw_items_count": len(items_data)},  # Можно сохранить метаданные
             items=tuple(plan_items)
         )

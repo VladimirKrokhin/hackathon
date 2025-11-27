@@ -2,12 +2,15 @@
 Модель данных для контент-планов
 """
 from datetime import datetime
+from typing import Iterable
+
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped
 
 from models import ContentPlan
 from . import Base
+from .content_plan_item import SqlAlchemyContentPlanItemModel
 
 
 class SqlAlchemyContentPlanModel(Base):
@@ -51,7 +54,7 @@ class SqlAlchemyContentPlanModel(Base):
             topics=self.topics,
             details=self.details,
             plan_data=self.plan_data, # FIXME!!!
-            items=tuple(item.to_dto() for item in self.items)
+            items=tuple(item.to_domain_model() for item in self.items)
         )
         return dto
     

@@ -40,7 +40,6 @@ class TelegramBotNotificator(AbstractNotificator):
                 f"📋 *{item.content_title}*\n"
                 f"📅 *Дата:* {date_str} в {time_str}\n"
                 f"📊 *План:* {plan.plan_name}\n"
-                f"🆔 *ID плана:* `{plan.id_}`\n\n"
                 f"💡 *Не забудьте подготовить материал для публикации!*"
             )
 

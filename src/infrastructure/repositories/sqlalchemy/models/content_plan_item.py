@@ -40,7 +40,7 @@ class SqlAlchemyContentPlanItemModel(Base):
         return f"<ContentPlanItem(id={self.id}, plan_id={self.content_plan_id}, title='{self.content_title}')>"
 
     def to_domain_model(self) -> ContentPlanItem:
-        dto = ContentPlanItem(
+        domain_model = ContentPlanItem(
             id_=self.id,
             content_plan_id=self.content_plan_id,
             publication_date=self.publication_date,
@@ -51,7 +51,7 @@ class SqlAlchemyContentPlanItemModel(Base):
             notification_sent_at=self.notification_sent_at,
         )
 
-        return dto
+        return domain_model
 
     
 

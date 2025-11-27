@@ -13,7 +13,7 @@ from services.content_plan_service import ContentPlanService
 
 from dtos import PlanPromptContext
 
-from models import ContentPlan
+from models import ContentPlan, PublicationStatus
 
 THREE_DAYS_PUBLICATION_TIME_PERIOD = "period_3days"
 WEEK_PUBLICATION_TIME_PERIOD = "period_week"
@@ -68,6 +68,58 @@ PUBLICATION_FREQUENCY_KEYBOARD = InlineKeyboardMarkup(
 #         ]
 #     )
 
+def format_content_plan(plan: ContentPlan) -> str:
+    """
+    Преобразует объект ContentPlan в читаемую строку для пользователя.
+    """
+    lines = []
+
+    # 1. Шапка плана
+    lines.append(f"📋 **План:** {plan.plan_name.upper()}")
+    lines.append(f"📅 **Период:** {plan.period}")
+    lines.append(f"🔄 **Частота:** {plan.frequency}")
+
+    if plan.topics:
+        lines.append(f"📌 **Темы:** {plan.topics}")
+
+    if plan.details:
+        lines.append(f"ℹ️ **Детали:** {plan.details}")
+
+    # Двойной отступ перед списком постов
+    lines.append("\n" + "=" * 30 + "\n")
+
+    # 2. Список постов (Items)
+    if not plan.items:
+        lines.append("📭 В этом плане пока нет запланированных публикаций.")
+    else:
+        lines.append(f"📑 **Список публикаций ({len(plan.items)} шт.):**\n")
+
+        for index, item in enumerate(plan.items, 1):
+            # Форматируем дату в удобный вид: 27.11.2023 14:30
+            date_str = item.publication_date.strftime("%d.%m.%Y %H:%M")
+
+            # Получаем читаемое значение статуса
+            status_str = item.status.value if isinstance(item.status, PublicationStatus) else str(item.status)
+
+            # Иконка статуса
+            status_icon = "✅" if item.status == PublicationStatus.PUBLISHED else "⏳" if item.status == PublicationStatus.SCHEDULED else "📝"
+
+            # Сборка блока поста
+            post_block = (
+                f"🔹 **Публикация #{index}**\n"
+                f"   ⏰ Время: {date_str}\n"
+                f"   🏷 Тема: {item.content_title}\n"
+                f"   {status_icon} Статус: {status_str}\n\n"
+                f"   📝 **Текст:**\n"
+                f"   {item.content_text}\n"
+            )
+
+            lines.append(post_block)
+            lines.append("-" * 20 + "\n")  # Разделитель между постами
+
+    # Объединяем все строки
+    return "\n".join(lines)
+
 
 # FIXME: не работает, пока не изменен ContentPlanService.generate_content_plan на возврат экземпляра ContentPlan вместо str
 async def generate_and_save_plan(message: Message, state: FSMContext, data: dict) -> None:
@@ -82,6 +134,7 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
     )
 
     generate_plan_context = PlanPromptContext.from_dict(data)
+    generate_plan_context.user_id = message.from_user.id
 
     generated_plan: ContentPlan = await content_plan_service.generate_content_plan(generate_plan_context)
 
@@ -94,7 +147,7 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
     # TODO: для пользователя и сначала запроси у пользователя подтверждение
 
     await message.answer(
-        str(generated_plan),
+        format_content_plan(generated_plan),
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=ReplyKeyboardRemove(),
     )
