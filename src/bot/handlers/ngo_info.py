@@ -347,7 +347,7 @@ async def ngo_cancel_handler(callback: CallbackQuery, state: FSMContext):
         "❎ Процесс сбора информации об НКО отменен.",
     )
 
-    start_handler(callback.message, state)
+    await start_handler(callback.message, state)
 
 
 @ngo_info_router.callback_query(F.data == NGO_SKIP_CALLBACK)

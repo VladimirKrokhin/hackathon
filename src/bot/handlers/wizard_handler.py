@@ -133,7 +133,7 @@ async def wizard_free_mode_handler(callback: CallbackQuery, state: FSMContext):
 
     if has_ngo_data:
         ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
-        ngo_name = ngo_data.get("ngo_name", "")
+        ngo_name = ngo_data.name
 
         await callback.message.answer(
             f"💭 **Свободная форма**\n\n"
@@ -414,7 +414,7 @@ async def wizard_start_text_generation(message_or_callback, state: FSMContext):
         text_generation_service = dispatcher["text_content_generation_service"]
         data = await state.get_data()
 
-        user_prompt = data["user_prompt"]
+        user_prompt = data["user_text"]
         context = PromptContext(
             goal=data["goal"],
             audience=data["audience"],

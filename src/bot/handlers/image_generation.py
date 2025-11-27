@@ -14,6 +14,7 @@ from services.text_generation import TextGenerationService
 
 from dtos import Dimensions
 
+from services.card_generation import CardGenerationService
 
 BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
 
@@ -34,6 +35,292 @@ CARD_PHOTO_CHOICE_KEYBOARD = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_confirmation")]
     ]
 )
+
+
+async def generate_cards_handler(message: Message, state: FSMContext):
+    """Функция для генерации карточек после выбора фото."""
+    data = await state.get_data()
+    user_text = data["user_text"]
+
+
+    # Получаем информацию об НКО из базы данных
+    ngo_service: NGOService = dispatcher["ngo_service"]
+    user_id = message.from_user.id
+    ngo_data = ngo_service.get_ngo_data(user_id)
+
+    # Устанавливаем значения по умолчанию
+    ngo_name = ngo_data["ngo_name"]
+    ngo_contact = ngo_data["ngo_contact"]
+
+    generated_post = data["generated_post"]
+
+    # Получаем общее изображение из состояния (для показа отдельно после генерации карточек)
+    image_source = data["image_source"]
+    generated_image = None
+    if image_source == "🤖 Сгенерировать ИИ":
+        generated_image = data["ai_generated_image"]
+    elif image_source == "📎 Загрузить своё":
+        generated_image = data["user_image"]
+
+    await message.answer(
+        "🎨 Создаю информационные карточки...",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+    try:
+        # Получаем параметры карточек из состояния
+        card_image_source = data["card_image_source"]
+        card_generated_image = None
+
+        logger.info(f"Генерация карточек с image_source='{card_image_source}'")
+
+        # Обработка выбранного пользователем фото для карточки
+        if card_image_source == "🤖 AI сгенерирует фото":
+            card_image_prompt = data["card_image_prompt"]
+            if not card_image_prompt:
+                await message.answer(
+                    "❌ Не указан промпт для генерации фото. Используем карточки без фото.",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+                card_generated_image = None
+            else:
+                await message.answer(
+                    "🤖 Генерирую фото для карточки ИИ...",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+                try:
+                    image_generation_service: ImageGenerationService = dispatcher["image_generation_service"]
+
+                    smart_card_prompt = card_image_prompt
+                    if data["generation_mode"] == "structured":
+                        event_context = f". Для события '{data.get('event_type', '')}' в '{data.get('event_place', '')}'"
+                        smart_card_prompt += event_context
+
+                    logger.info(f"Генерируем фото для карточки с промпт: {smart_card_prompt}")
+                    card_generated_image = await image_generation_service.generate_image(
+                        prompt=smart_card_prompt,
+                        width=1024,
+                        height=768
+                    )
+                    await message.answer(
+                        "✅ Фото для карточки готово!",
+                        reply_markup=ReplyKeyboardRemove(),
+                    )
+                except Exception as e:
+                    logger.exception(f"Ошибка генерации фото для карточки: {e}")
+                    await message.answer(
+                        "⚠️ Не удалось сгенерировать фото для карточки. Используем без фото.",
+                        reply_markup=ReplyKeyboardRemove(),
+                    )
+                    card_generated_image = None
+
+        elif card_image_source == "📎 Загрузить своё фото":
+            card_user_image = data["card_user_image"]
+            if card_user_image:
+                card_generated_image = card_user_image
+                await message.answer(
+                    "✅ Использую ваше фото для карточки.",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+            else:
+                await message.answer(
+                    "❌ Фото не загружено. Используем карточки без фото.",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+                card_generated_image = None
+
+        elif card_image_source == "🚫 Без фото":
+            card_generated_image = None
+            await message.answer(
+                "✅ Выбрано: Без фото для карточки",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+        # Логируем ключевые данные для отладки
+        logger.info(f"Данные для карточки: ngo_name='{ngo_name}', ngo_contact='{ngo_contact}'")
+        logger.info(f"Сгенерированный пост: {generated_post[:100]}...")
+
+        # Определяем подзаголовок в зависимости от режима
+        if data.get("generation_mode") == "structured":
+            subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
+        else:
+            subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
+
+        # Сохраняем полный пост как fallback
+        safe_content = generated_post
+
+        # Вместо простого обрезания используем GPT для сокращения контента специально для карточки
+        await message.answer(
+            "🤖 Создаю краткий контент для карточки...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        try:
+            # Генерируем сокращенный контент специально для карточки
+            card_text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
+            card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
+
+            card_content = await card_generation_service.generate_card_text(data, generated_post)
+
+            # Используем сгенерированный сокращенный контент, если он получился короче 300 символов
+            # Иначе используем обрезанный полный пост как fallback
+            if card_content and len(card_content.strip()) > 10 and len(card_content.strip()) < 300:
+                card_content_for_template = card_content.strip()
+                logger.info(f"Используем сокращенный контент для карточки: {len(card_content)} символов")
+            else:
+                # Fallback - обрезаем текст если GPT дал слишком длинный результат
+                card_content_for_template = f"{safe_content[:300]}..." if len(safe_content) > 300 else safe_content
+                logger.warning(f"GPT дал неподходящий контент ({len(card_content) if card_content else 0} символов), используем fallback")
+
+            await message.answer(
+                "✅ Краткий контент для карточки готов!",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+
+        except Exception as e:
+            logger.exception("Ошибка генерации сокращенного контента для карточки, используем fallback")
+            # Fallback в случае ошибки
+            card_content_for_template = f"{safe_content[:300]}..." if len(safe_content) > 300 else safe_content
+
+        # Генерируем нормальный заголовок для карточки на основе текста
+        await message.answer(
+            "🏷️ Создаю заголовок для карточки...",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+
+        try:
+            # Используем GPT для генерации привлекательного заголовка
+            title_generation_prompt = (
+                f"Исходный текст поста: {card_content_for_template}\n\n"
+                "Создай короткий, привлекательный заголовок (5-7 слов) для информационной карточки НКО. "
+                "Заголовок должен быть ярким, мотивирующим и побуждать к участию. "
+                "Не добавляй кавычки в ответе."
+            )
+
+            title = await card_text_generation_service.generate_text_content(title_generation_prompt, title_generation_prompt)
+
+            # Очищаем и ограничиваем длину заголовка
+            if title:
+                title = title.strip()
+                if len(title) > 50:  # Ограничиваем длину
+                    title = title[:47] + "..."
+            else:
+                # Fallback если GPT не сгенерировал заголовок
+                title = data.get('event_type', 'Событие НКО')[:30] + "..."
+
+            await message.answer(
+                f"✅ Заголовок готов: **{title}**",
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        except Exception as e:
+            logger.exception("Ошибка генерации заголовка для карточки, используем fallback")
+            # Fallback заголовок
+            title = data.get('event_type', 'Событие НКО')[:30] + "..."
+            if len(title) <= 3 or title == "...":  # Если получился слишком короткий
+                title = "Присоединяйтесь к событию!"
+
+        template_data = {
+            "title": title,
+            "subtitle": subtitle or "",
+            "content": card_content_for_template,
+            "org_name": ngo_name or "Ваша НКО",
+            "contact_info": ngo_contact or "",
+            "primary_color": get_color_by_goal(goal or "🎯 Рассказать о мероприятии") or "#667eea",
+            "secondary_color": get_secondary_color_by_goal(goal or "🎯 Рассказать о мероприятии") or "#764ba2",
+            "text_color": "#333333",
+            "background_color": "#f5f7fa",
+        }
+
+        logger.info(f"Template data keys: {list(template_data.keys())}")
+        logger.info(f"Title: '{template_data['title']}', Content length: {len(template_data['content'])}")
+        logger.info(f"Org name: '{template_data['org_name']}', Contact: '{template_data['contact_info']}'")
+        logger.warning(f"Goal: '{goal}', Platform: '{platform}' (debugging card issue)")
+
+        # Добавляем специфические данные для структурированной формы
+        if data.get("generation_mode") == "structured":
+            template_data.update({
+                "event_type": data.get('event_type', ''),
+                "event_date": data.get('event_date', ''),
+                "event_place": data.get('event_place', ''),
+                "event_audience": data.get('event_audience', ''),
+                "event_details": data.get('event_details', ''),
+                "narrative_style": data.get('narrative_style', ''),
+            })
+
+        # Добавляем данные для свободной формы
+        if data.get("generation_mode") == "free_form" or not data.get("generation_mode"):
+            template_data.update({
+                "user_description": data.get('user_text', ''),
+                "narrative_style": data.get('narrative_style', ''),
+            })
+
+        # Добавляем изображение для фона карточки
+        # PILCardGenerator в первую очередь проверяет background_image_bytes
+        card_image_to_use = card_generated_image if card_generated_image else generated_image
+        if card_image_to_use:
+            # Передаем изображение напрямую как bytes для PILCardGenerator
+            template_data["background_image_bytes"] = card_image_to_use
+            logger.info(f"Фоновое изображение добавлено как bytes: {len(card_image_to_use)} байт")
+        else:
+            logger.info("Фоновое изображение не добавлено")
+
+        # Логируем полные данные шаблона для отладки
+        logger.info(f"Full template_data: {template_data}")
+
+        template_name = get_template_by_platform(platform)
+        logger.info(f"Using template: {template_name} for platform: {platform}")
+        card_generation_service: CardGenerationService = dp["card_generation_service"]
+
+        cards = await card_generation_service.generate_multiple_cards(
+            template_name=template_name,
+            data=template_data,
+            platform=platform,
+        )
+
+        if not cards:
+            raise ValueError("Генератор карточек ничего не вернул")
+
+        # Отправляем сгенерированное ИИ изображение сначала отдельно
+        if generated_image and image_source == "🤖 Сгенерировать ИИ":
+            await message.answer(
+                "🖼️ **Вот ваше сгенерированное изображение:**",
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            await message.answer_photo(
+                photo=BufferedInputFile(generated_image, "ai_generated_image.png"),
+                caption="🎨 Сгенерированное ИИ изображение",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+
+        await message.answer(
+            "🎨 Вот ваши карточки для соцсетей:",
+            reply_markup=ReplyKeyboardRemove(),
+            )
+
+        for card_type, image_bytes in cards.items():
+            caption = get_caption_for_card_type(card_type, platform)
+            image_stream = image_bytes
+            await message.answer_photo(
+                photo=BufferedInputFile(image_stream, f"{card_type}.png"),
+                caption=caption,
+                reply_markup=ReplyKeyboardRemove(),
+            )
+
+        await message.answer(
+            "✨ Все материалы готовы к публикации! Что хотите сделать дальше?",
+            reply_markup=get_post_generation_keyboard(),
+        )
+        await state.set_state(ContentGeneration.waiting_for_confirmation)
+
+    except Exception as error:
+        logger.exception("Ошибка при генерации карточек: %s", error)
+        await message.answer(
+            "❌ Не удалось сформировать карточки.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        raise error
 
 
 async def complete_generation_handler(message: Message, state: FSMContext) -> None:
@@ -285,6 +572,9 @@ async def describe_image_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик описания изображения."""
     await callback.answer()
     await state.clear()
+
+    from bot.handlers import TEXT_SETUP_PHOTO
+
     await state.set_state(ContentGeneration.waiting_for_image_description)
 
     await callback.message.answer_photo(
