@@ -12,6 +12,8 @@ from services.ngo_service import NGOService
 from bot import dispatcher
 from bot.states import EditText
 
+from dtos import EditPromptContext
+
 text_editing_router = Router(name="text_editing")
 logger = logging.getLogger(__name__)
 
@@ -59,8 +61,8 @@ async def text_handler(message: Message, state: FSMContext):
         "✒️ **Уточнение для редактирования**\n\n"
         "Хотите ли вы добавить дополнительные инструкции или пожелания по редактированию текста?\n\n"
         "_Например: «Сделать текст более формальным» или «Исправить только грамматику»_",
-        reply_markup=SKIP_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
+        # Пока что без возможности пропуска
     )
     await state.set_state(EditText.waiting_for_details)
 
@@ -90,6 +92,8 @@ async def details_handler(message: Message, state: FSMContext):
                 "ngo_contact": ngo_data.get("ngo_contact", ""),
             })
             await state.update_data(**data)
+
+    data = EditPromptContext.from_dict(data)
 
     await message.answer(
         "✏️ **Редактирую текст...**\n\n_Это может занять 10-30 секунд._",
@@ -125,11 +129,14 @@ async def details_handler(message: Message, state: FSMContext):
 
     await state.clear()
 
+
 @text_editing_router.callback_query(F.data == "edit_text")
 async def edit_text_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик редактирования текста - запускает процесс редактирования."""
     await callback.answer()
     await state.clear()
+
+    from bot.handlers.start import BACK_TO_MAIN_MENU_CALLBACK_DATA
 
     await callback.message.answer(
         "📝 Редактирование текста\n\n"
@@ -149,6 +156,8 @@ async def edit_text_handler(callback: CallbackQuery, state: FSMContext):
 async def start_text_editing_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик начала редактирования текста."""
     await callback.answer()
+
+    from bot.handlers.start import BACK_TO_MAIN_MENU_CALLBACK_DATA
 
     await state.clear()
     await state.set_state(EditText.waiting_for_text)

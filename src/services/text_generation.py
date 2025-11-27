@@ -1,7 +1,7 @@
 import logging
 
 from infrastructure.prompt_builder import AbstractPromptBuilder
-from dtos import PromptContext
+from dtos import PromptContext, EditPromptContext
 from infrastructure.response_processor import AbstractResponseProcessor
 from infrastructure.gpt import AbstractGPT
 
@@ -79,10 +79,9 @@ class TextGenerationService:
         )
         return refactored_text
 
-
     async def edit_text(
         self,
-        context
+        context: EditPromptContext
     ) -> str:
         logger.info(f"Редактирование текста пользователя.")
 

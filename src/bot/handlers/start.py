@@ -45,8 +45,7 @@ START_MENU_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📝 Создание контента", callback_data=WIZARD_CREATE_CONTENT)],
         [InlineKeyboardButton(text="📅 Управление контент-планами", callback_data=CONTENT_PLAN_MENU_CALLBACK_DATA)],
-        # FIXME: "Редактировать текст" не работает
-        # [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=EDIT_TEXT_CALLBACK_DATA)],
+        [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=EDIT_TEXT_CALLBACK_DATA)],
         [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data=GENERATE_IMAGES_CALLBACK_DATA)],
         [InlineKeyboardButton(text="📋 Информация о НКО", callback_data=VIEW_NGO_INFO_CALLBACK_DATA)],
     ]
