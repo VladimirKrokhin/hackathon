@@ -320,3 +320,24 @@ class ContentPlanService:
 
         logger.info(f"Успешно сгенерирован структурированный план на {len(plan_items)} постов")
         return content_plan
+
+    async def get_plan_by_id(self, plan_id: int) -> Optional[ContentPlan]:
+        """
+        Получить контент-план по ID.
+        """
+        try:
+            plan = self.repository.get_by_id(plan_id)
+            return plan
+        except Exception as e:
+            logger.error(f"Ошибка при получении плана {plan_id}: {e}")
+            return None
+
+    async def get_plan_item_by_id(self, item_id: int) -> Optional[ContentPlanItem]:
+        """
+        Получить конкретный элемент (пост) контент-плана по ID.
+        """
+        try:
+            return self.repository.get_content_plan_item_by_id(item_id)
+        except Exception as e:
+            logger.error(f"Ошибка при получении элемента плана {item_id}: {e}")
+            return None

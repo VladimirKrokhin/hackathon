@@ -271,7 +271,8 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         sections.append(generated_post)
 
         sections.append(
-            "Отвечайте только готовым отредактированным текстом поста, без дополнительных комментариев."
+            "Отвечайте только готовым отредактированным текстом поста, без дополнительных комментариев. "
+            "Не используйте одиночные звездочки '*' и подчеркивания '_'!"
         )
         
         prompt = "\n".join(sections)
@@ -342,7 +343,7 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
 
         sections.append(
             "ТРЕБОВАНИЯ К КОНТЕНТУ:"
-            "1. Тексты должны быть вовлекающими, грамотными и соответствовать теме."
+            "1. Описания постов должны быть грамотными и соответствовать теме."
             "2. Заголовки должны быть кликбейтными, но релевантными."
             "3. Даты публикаций должны логично распределяться "
             f"внутри указанного периода ({period}) согласно частоте ({frequency})."
@@ -354,7 +355,7 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
             "Каждый объект соответствует одной публикации и содержит следующие ключи:"
             '- "publication_date": дата и время публикации в формате ISO (YYYY-MM-DDTHH:MM:SS).'
             '- "content_title": заголовок поста.'
-            '- "content_text": полный текст поста (включая эмодзи, если уместно).'
+            '- "content_text": детальное описание наполнения поста, но не сам пост!'
             '- "status": всегда используй значение "запланировано".'
             
             "## Пример структуры JSON (заполни его своими данными):"
@@ -362,14 +363,13 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
             '  {'
             '    "publication_date": "2023-10-25T10:00:00",'
             '    "content_title": "Заголовок поста",'
-            '    "content_text": "Текст поста...",'
+            '    "content_text": "Описание поста...",'
             '    "status": "запланировано"'
             '  }'
             ']'
         )
 
         prompt = "\n".join(sections)
-        print(prompt)
         return textwrap.dedent(prompt).strip()
 
     def build_edit_text_prompt(self, user_data: EditPromptContext) -> str:
