@@ -8,7 +8,6 @@ from aiogram.types.inline_keyboard_button import InlineKeyboardButton
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 
 from bot import dispatcher
-from bot.handlers.callbacks import YES_NO_KEYBOARD, PLATFORM_KEYBOARD
 from bot.handlers.start import BACK_TO_START_KEYBOARD
 from bot.states import ContentWizard
 from services.ngo_service import NGOService
@@ -642,6 +641,15 @@ async def wizard_edit_narrative_style_handler(callback: CallbackQuery, state: FS
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_narrative_style_edit)
+
+PLATFORM_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="📱 ВКонтакте (для молодежи)", callback_data="platform_vk")],
+        [InlineKeyboardButton(text="💬 Telegram (для взрослых/бизнеса)", callback_data="platform_telegram")],
+        [InlineKeyboardButton(text="🌐 Сайт (для информационных материалов)", callback_data="platform_website")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_previous")]
+    ]
+)
 
 
 @create_content_wizard.callback_query(F.data == "wizard_edit_platform")

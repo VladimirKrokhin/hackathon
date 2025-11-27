@@ -8,19 +8,28 @@ from aiogram.types import FSInputFile, Message, InlineKeyboardMarkup, InlineKeyb
 from aiogram.fsm.context import FSMContext
 
 from bot import dispatcher
-from bot.handlers.callbacks import IMAGE_GENERATION_KEYBOARD
-from bot.handlers.image_generation import GENERATE_IMAGES_CALLBACK_DATA
 from bot.handlers.ngo_info import VIEW_NGO_INFO_CALLBACK_DATA
 from models import Ngo
 from services.ngo_service import NGOService
 
 from bot.handlers.content_plan_menu import CONTENT_PLAN_MENU_CALLBACK_DATA
+from bot.handlers.image_generation import GENERATE_IMAGES_CALLBACK_DATA
 
 logger = logging.getLogger(__name__)
 
 start_router = Router(name="start")
 
 BACK_TO_START_MENU_CALLBACK_DATA = "back_to_start_menu"
+BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
+
+
+@start_router.callback_query(F.data == BACK_TO_MAIN_MENU_CALLBACK_DATA)
+async def back_to_main_handler(callback: CallbackQuery, state: FSMContext):
+    """Возврат в главное меню."""
+
+    await callback.answer()
+    await state.clear()
+    await start_handler(callback.message, state)
 
 
 ASSETS_BASE_DIR_PATH = Path(__file__).resolve().parent.parent

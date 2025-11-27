@@ -6,7 +6,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot import bot, dispatcher
-from bot.handlers.callbacks import PLATFORM_KEYBOARD, YES_NO_KEYBOARD
 from bot.handlers.wizard_handler import NARRATIVE_STYLE_KEYBOARD
 from bot.states import ContentGeneration, EditText
 from services.ngo_service import NGOService

@@ -1,5 +1,6 @@
 from aiogram import Router
 
+from .image_generation import image_generation_router
 from .ngo_info import ngo_info_router
 from .start import start_router
 from .wizard_handler import create_content_wizard
@@ -14,6 +15,7 @@ router = Router()
 router.include_router(start_router)
 router.include_router(ngo_info_router)
 router.include_router(new_generation_router)
+router.include_router(image_generation_router)
 router.include_router(create_content_wizard)
 router.include_router(content_plan_router)
 router.include_router(content_plan_menu_router)

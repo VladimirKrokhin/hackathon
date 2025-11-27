@@ -15,6 +15,7 @@ from services.ngo_service import NGOService
 
 from models import Ngo
 
+
 ngo_info_router = Router(name="ngo_info")
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,13 @@ logger = logging.getLogger(__name__)
 UPDATE_NGO_CONTENT_CALLBACK_DATA = "update_ngo"
 VIEW_NGO_INFO_CALLBACK_DATA = "ngo_info"
 
+BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
 
 NGO_INFO_MENU_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📋 Посмотреть мою НКО", callback_data="view_ngo")],
         [InlineKeyboardButton(text="🔄 Обновить данные НКО", callback_data=UPDATE_NGO_CONTENT_CALLBACK_DATA)],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)],
     ]
 )
 
@@ -36,7 +38,7 @@ FILL_NGO_INFO_CALLBACK_DATA = "fill_ngo"
 NGO_INFO_MENU_KEYBOARD_NO_NGO = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="🏢 Заполнить информацию об НКО", callback_data=FILL_NGO_INFO_CALLBACK_DATA)],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)],
     ]
 )
 
