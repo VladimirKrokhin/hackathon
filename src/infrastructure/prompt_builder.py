@@ -7,6 +7,7 @@
 на редактирование текста.
 """
 
+from datetime import datetime
 from abc import ABC, abstractmethod
 from typing import Dict, Union, Iterable, List
 import logging
@@ -333,6 +334,7 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
             f"- Период планирования: {period}",
             f"- Частота публикаций: {frequency}",
             f"- Темы для плана: {themes}",
+            f"- Текущие дата и время (год-месяц-день часы:минуты:секунды): {datetime.today().strftime('%Y-%m-%d %H:%M:%S')}"
         ]
 
         if details:
@@ -366,13 +368,8 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
             ']'
         )
 
-        # sections.extend([
-        #     "Также предоставьте объяснения, почему вы предложили именно такой план.",
-        #     "Используйте отступы, списки и эмодзи для лучшей читаемости. Не перегружайте текст.",
-        #     "Используйте форматирование текста, которое корректно отображается в Telegram.",
-        # ])
-
         prompt = "\n".join(sections)
+        print(prompt)
         return textwrap.dedent(prompt).strip()
 
     def build_edit_text_prompt(self, user_data: EditPromptContext) -> str:
