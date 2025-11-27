@@ -87,7 +87,7 @@ async def wizard_structured_mode_handler(callback: CallbackQuery, state: FSMCont
     """Обработчик выбора структурированной формы."""
     from bot.handlers.start import BACK_TO_START_KEYBOARD
     await callback.answer()
-    await state.update_data(create_content_wizard_mode="structured")
+    await state.update_data(wizard_mode="structured")
 
     # Проверяем наличие данных НКО
     ngo_service: NGOService = dispatcher["ngo_service"]
@@ -123,7 +123,7 @@ async def wizard_structured_mode_handler(callback: CallbackQuery, state: FSMCont
 async def wizard_free_mode_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора свободной формы."""
     await callback.answer()
-    await state.update_data(create_content_wizard_mode="free")
+    await state.update_data(wizard_mode="free")
 
     # Проверяем наличие данных НКО
     ngo_service: NGOService = dispatcher["ngo_service"]
@@ -199,7 +199,7 @@ async def wizard_proceed_to_text_setup(callback: CallbackQuery, state: FSMContex
         text += (
             "Опишите ваш пост свободно.\n\n"
             "**Расскажите подробно**\n"
-            "Какая информация должна быть в посте, какую цель он преследует.",
+            "Какая информация должна быть в посте, какую цель он преследует."
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_setup)
 
@@ -413,29 +413,32 @@ async def wizard_start_text_generation(message_or_callback, state: FSMContext):
         # Генерация текста
         text_generation_service = dispatcher["text_content_generation_service"]
         data = await state.get_data()
+        user_text = ""
+        if data["wizard_mode"] == "structured":
+            context = PromptContext(
+                event_type=data.get("event_type", ""),
+                event_date=data.get("event_date", ""),
+                event_place=data.get("event_place", ""),
+                event_audience=data.get("event_audience", ""),
+                narrative_style=data.get("narrative_style", ""),
+                platform=data.get("platform", ""),
+                has_ngo_info=data.get("has_ngo_info", ""),
+                ngo_name=data.get("ngo_name", ""),
+                ngo_description=data.get("ngo_description", ""),
+                ngo_activities=data.get("ngo_activities", ""),
+                ngo_contact=data.get("ngo_contact", ""),
+            )
+        else:
+            user_text = data["user_description"]
+            context = PromptContext(
+                has_ngo_info=data.get("has_ngo_info", ""),
+                ngo_name=data.get("ngo_name", ""),
+                ngo_description=data.get("ngo_description", ""),
+                ngo_activities=data.get("ngo_activities", ""),
+                ngo_contact=data.get("ngo_contact", ""),
+            )
 
-        user_prompt = data["user_text"]
-        context = PromptContext(
-            goal=data["goal"],
-            audience=data["audience"],
-            platform=data["platform"],
-            content_format=data["content_format"],
-            volume=data["volume"],
-            event_details=data["event_details"],
-            has_event=data["event"],
-            event_type=data["event_type"],
-            event_date=data["event_date"],
-            event_place=data["event_place"],
-            event_audience=data["event_audience"],
-            narrative_style=data["narrative_style"],
-            has_ngo_info=data.get("has_ngo_info"),
-            ngo_name=data.get("ngo_name"),
-            ngo_description=data.get("ngo_name"),
-            ngo_activities=data.get("ngo_activities"),
-            ngo_contact=data.get("ngo_contact"),
-        )
-
-        generated_text = await text_generation_service.generate_text(context, user_prompt)
+        generated_text = await text_generation_service.generate_text(context, user_text)
 
         await state.update_data(generated_text=generated_text)
 

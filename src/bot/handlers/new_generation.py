@@ -40,7 +40,7 @@ async def free_form_generation_handler(message: Message, state: FSMContext):
     await state.set_state(ContentGeneration.waiting_for_user_description)
 
 
-@new_generation_router.callback_query(F.data == "no")
+@new_generation_router.callback_query(F.data == "no", ContentGeneration.waiting_for_ngo_info_choice)
 async def no_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик ответа 'Нет'."""
     await callback.answer()
