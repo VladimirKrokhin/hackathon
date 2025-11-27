@@ -2,7 +2,7 @@ import logging
 
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import BufferedInputFile, CallbackQuery, Message, ReplyKeyboardRemove
+from aiogram.types import BufferedInputFile, CallbackQuery, Message, ReplyKeyboardRemove, FSInputFile
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.types.inline_keyboard_button import InlineKeyboardButton
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
@@ -16,6 +16,21 @@ from services.text_generation import TextGenerationService
 
 from bot.states import ContentGeneration
 
+from models import Ngo
+
+
+BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
+
+
+YES_NO_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да", callback_data="yes"),
+         InlineKeyboardButton(text="❌ Нет", callback_data="no")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)]
+    ]
+)
+
+
 BACK_TO_START_MENU_CALLBACK_DATA = "back_to_start_menu"
 
 logger = logging.getLogger(__name__)
@@ -24,6 +39,8 @@ create_content_wizard = Router(name="wizard")
 
 
 WIZARD_CREATE_CONTENT = "create_content_wizard"
+
+
 
 # ===== ЭТАП 1: ЗАПУСК WIZARD =====
 
@@ -35,6 +52,8 @@ CONTENT_WIZARD_SELECT_MODE_KEYBOARD: InlineKeyboardMarkup = InlineKeyboardMarkup
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_START_MENU_CALLBACK_DATA)]
         ]
     )
+
+
 
 @create_content_wizard.callback_query(F.data == WIZARD_CREATE_CONTENT)
 async def start_wizard_handler(callback: CallbackQuery, state: FSMContext):
@@ -74,8 +93,8 @@ async def wizard_structured_mode_handler(callback: CallbackQuery, state: FSMCont
     has_ngo_data: bool = ngo_service.ngo_exists(user_id)
 
     if has_ngo_data:
-        ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
-        ngo_name: str = ngo_data["ngo_name"]
+        ngo_data: Ngo = ngo_service.get_ngo_data_by_user_id(user_id)
+        ngo_name: str = ngo_data.name
 
         await callback.message.answer(
             f"📋 **Структурированная форма**\n\n"
@@ -170,27 +189,32 @@ async def wizard_proceed_to_text_setup(callback: CallbackQuery, state: FSMContex
     data = await state.get_data()
     wizard_mode = data.get("wizard_mode", "structured")
 
+    text = "📝 **Этап 2: Настройка текста**\n\n"
+
+
     if wizard_mode == "structured":
-        await callback.message.answer(
-            "📝 **Этап 2: Настройка текста**\n\n"
+        text += (
             "Давайте настроим параметры структурированного поста.\n\n"
             "**Что за событие?**\n"
-            "Опишите коротко, о каком событии будет пост.",
-            reply_markup=ReplyKeyboardRemove(),
-            parse_mode=ParseMode.MARKDOWN,
+            "Опишите коротко, о каком событии будет пост."
         )
+
         await state.set_state(ContentWizard.waiting_for_wizard_text_setup)
     else:  # free form
-        await callback.message.answer(
-            "💭 **Этап 2: Настройка текста**\n\n"
+        text += (
             "Опишите ваш пост свободно.\n\n"
             "**Расскажите подробно**\n"
             "Какая информация должна быть в посте, какую цель он преследует.",
-            reply_markup=ReplyKeyboardRemove(),
-            parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_setup)
 
+
+    await callback.message.answer_photo(
+        photo=TEXT_SETUP_PHOTO,
+        caption=text,
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
 # ===== ЭТАП 2: НАСТРОЙКА ТЕКСТА =====
 
@@ -205,8 +229,10 @@ async def wizard_text_setup_handler(message: Message, state: FSMContext):
         event_type = message.text.strip()
         await state.update_data(event_type=event_type)
 
-        await message.answer(
-            "📅 **Когда состоится событие?**\n"
+
+        await message.answer_photo(
+            photo=CALENDAR_PHOTO,
+            caption="📅 **Когда состоится событие?**\n"
             "Укажите дату и время проведения.",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode=ParseMode.MARKDOWN,
@@ -224,11 +250,14 @@ async def wizard_event_date_handler(message: Message, state: FSMContext):
     event_date = message.text.strip()
     await state.update_data(event_date=event_date)
 
-    await message.answer(
-        "📍 **Где состоится событие?**\n"
+
+    await message.answer_photo(
+        photo=LOCATION_PHOTO,
+        caption="📍 **Где состоится событие?**\n"
         "Укажите место проведения.",
         parse_mode=ParseMode.MARKDOWN,
     )
+
     await state.set_state(ContentWizard.waiting_for_wizard_event_place)
 
 
@@ -238,8 +267,9 @@ async def wizard_event_place_handler(message: Message, state: FSMContext):
     event_place = message.text.strip()
     await state.update_data(event_place=event_place)
 
-    await message.answer(
-        "👥 **Кто приглашен на событие?**\n"
+    await message.answer_photo(
+        photo=INSPECT_PHOTO,
+        caption="👥 **Кто приглашен на событие?**\n"
         "Укажите целевую аудиторию (волонтеры, дети, родители, пенсионеры).",
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -252,8 +282,9 @@ async def wizard_event_audience_handler(message: Message, state: FSMContext):
     event_audience = message.text.strip()
     await state.update_data(event_audience=event_audience)
 
-    await message.answer(
-        "📝 **Дополнительные детали**\n"
+    await message.answer_photo(
+        photo=TEXT_SETUP_PHOTO,
+        caption="📝 **Дополнительные детали**\n"
         "Расскажите подробнее о событии: что будет интересного, зачем участвовать.",
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -276,8 +307,9 @@ async def wizard_event_details_handler(message: Message, state: FSMContext):
     event_details = message.text.strip()
     await state.update_data(event_details=event_details)
 
-    await message.answer(
-        "🎨 **Выберите стиль повествования:**",
+    await message.answer_photo(
+        photo=NARRATIVE_STYLE_PHOTO,
+        caption="🎨 **Выберите стиль повествования:**",
         reply_markup=NARRATIVE_STYLE_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -312,10 +344,13 @@ async def wizard_narrative_motivational_handler(callback: CallbackQuery, state: 
     await wizard_proceed_to_platform(callback, state)
 
 
+
+
 async def wizard_proceed_to_platform(callback: CallbackQuery, state: FSMContext):
     """Переход к выбору платформы."""
-    await callback.message.answer(
-        "📱 **На какой платформе будет опубликован пост?**",
+    await callback.message.answer_photo(
+        photo=PLATFORM_PHOTO,
+        caption="📱 **На какой платформе будет опубликован пост?**",
         reply_markup=PLATFORM_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -359,8 +394,9 @@ WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD = InlineKeyboardMarkup(
 
 async def wizard_start_text_generation(message_or_callback, state: FSMContext):
     """Запуск генерации текста."""
-    await message_or_callback.answer(
-        "🧠 **Генерируем текст поста...**",
+    await message_or_callback.answer_photo(
+        photo=TEXT_GENERATION_PHOTO,
+        caption="🧠 **Генерируем текст поста...**",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -918,13 +954,25 @@ async def wizard_prompt_edit_handler(callback: CallbackQuery, state: FSMContext)
     await state.set_state(ContentWizard.waiting_for_wizard_image_prompt_edit)
 
 
+WIZARD_IMAGE_MANAGEMENT_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перегенерировать", callback_data="wizard_image_regenerate")],
+        [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data="wizard_image_edit_prompt")],
+        [InlineKeyboardButton(text="🎨 Генерация карточки", callback_data="wizard_create_content")],
+        [InlineKeyboardButton(text="⬅️ К тексту", callback_data="wizard_back_to_text")],
+        [InlineKeyboardButton(text="↩️ К источнику", callback_data="wizard_back_to_image_source")]
+    ]
+)
+
+
 @create_content_wizard.callback_query(F.data == "wizard_generate_image")
 async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик генерации изображения."""
     await callback.answer()
 
-    await callback.message.answer(
-        "🎨 **Генерируем изображение...**",
+    await callback.message.answer_photo(
+        photo=IMAGE_GENERATION_PHOTO,
+        caption="🎨 **Генерируем изображение...**",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -949,7 +997,7 @@ async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMConte
         await callback.message.answer_photo(
             photo=BufferedInputFile(generated_image, "wizard_generated_image.png"),
             caption="✅ **Изображение готово!**\n\n**Что делать дальше?**",
-            reply_markup=get_wizard_image_management_keyboard(),
+            reply_markup=WIZARD_IMAGE_MANAGEMENT_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN
         )
         await state.set_state(ContentWizard.waiting_for_wizard_image_result)
@@ -1128,8 +1176,11 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
     """Финальная генерация только карточек (текст уже готов)."""
     await callback.answer()
 
-    await callback.message.answer(
-        "🎨 **Создаем информационные карточки...**",
+    from bot.handlers import CARD_GENERATION_PHOTO
+
+    await callback.message.answer_photo(
+        photo=CARD_GENERATION_PHOTO,
+        content="🎨 **Создаем информационные карточки...**",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -1929,32 +1980,6 @@ async def get_tips_handler(callback: CallbackQuery, state: FSMContext):
         ),
     )
 
-
-
-# === ОБРАБОТЧИКИ ВЫБОРА СТИЛЯ ПОВЕСТВОВАНИЯ ===
-async def narrative_style_handler_common(callback: CallbackQuery, state: FSMContext, style_name: str):
-    """Общий обработчик для всех стилей повествования."""
-    await state.update_data(narrative_style=style_name)
-
-    data = await state.get_data()
-    generation_mode = data.get("generation_mode", "")
-
-    if generation_mode == "free_form":
-        # Для свободной формы - сразу переходим к выбору платформы
-        await callback.message.answer(
-            "📱 **На какой платформе будет публиковаться пост?**",
-            reply_markup=PLATFORM_KEYBOARD,
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        await state.set_state(ContentGeneration.waiting_for_platform)
-    else:
-        # Для структурированной формы - сразу переходим к выбору платформы
-        await callback.message.answer(
-            "📱 **На какой платформе будет публиковаться пост?**",
-            reply_markup=PLATFORM_KEYBOARD,
-            parse_mode=ParseMode.MARKDOWN,
-        )
-        await state.set_state(ContentGeneration.waiting_for_platform)
 
 
 

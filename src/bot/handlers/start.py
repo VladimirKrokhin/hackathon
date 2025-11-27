@@ -19,6 +19,7 @@ from bot.handlers.image_generation import GENERATE_IMAGES_CALLBACK_DATA
 from bot.handlers.text_editing import EDIT_TEXT_CALLBACK_DATA
 from bot.handlers.wizard_handler import WIZARD_CREATE_CONTENT
 
+
 logger = logging.getLogger(__name__)
 
 start_router = Router(name="start")
@@ -36,9 +37,6 @@ async def back_to_main_handler(callback: CallbackQuery, state: FSMContext):
     await start_handler(callback.message, state)
 
 
-ASSETS_BASE_DIR_PATH = Path(__file__).resolve().parent.parent
-ABOUT_PHOTO_PATH = ASSETS_BASE_DIR_PATH / 'assets' / 'about.png'
-ABOUT_PHOTO = FSInputFile(path=ABOUT_PHOTO_PATH)
 
 
 START_MENU_KEYBOARD = InlineKeyboardMarkup(
@@ -91,6 +89,8 @@ async def start_handler(message: Message, state: FSMContext):
         "• /start — текущее меню\n\n"
         "Что вы хотите сделать?"
     )
+
+    from bot.handlers import ABOUT_PHOTO
 
     await message.answer_photo(
         photo=ABOUT_PHOTO,

@@ -12,6 +12,7 @@ from services.ngo_service import NGOService
 from bot import dispatcher
 from bot.states import EditText
 
+
 text_editing_router = Router(name="text_editing")
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ async def text_handler(message: Message, state: FSMContext):
 @text_editing_router.message(EditText.waiting_for_details, F.text)
 async def details_handler(message: Message, state: FSMContext):
     from bot.handlers.start import BACK_TO_START_KEYBOARD
+    from bot.handlers import TEXT_GENERATION_PHOTO
 
     details = message.text.strip()
     if details == "⏭️ Пропустить уточнения":
@@ -91,8 +93,9 @@ async def details_handler(message: Message, state: FSMContext):
             })
             await state.update_data(**data)
 
-    await message.answer(
-        "✏️ **Редактирую текст...**\n\n_Это может занять 10-30 секунд._",
+    await message.answer_photo(
+        photo=TEXT_GENERATION_PHOTO,
+        caption="✏️ **Редактирую текст...**\n\n_Это может занять 10-30 секунд._",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=ParseMode.MARKDOWN,
     )

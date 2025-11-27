@@ -59,70 +59,70 @@ async def no_handler(callback: CallbackQuery, state: FSMContext):
 # СТРУКТУРИРОВАННАЯ ФОРМА
 # ===============================
 
-@new_generation_router.message(ContentGeneration.waiting_for_event_type, F.text)
-async def event_type_handler(message: Message, state: FSMContext):
-    """Обработчик для типа события."""
-    event_type = message.text.strip()
-    if not event_type:
-        await message.answer(
-            "Пожалуйста, опишите событие.",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return
+# @new_generation_router.message(ContentGeneration.waiting_for_event_type, F.text)
+# async def event_type_handler(message: Message, state: FSMContext):
+#     """Обработчик для типа события."""
+#     event_type = message.text.strip()
+#     if not event_type:
+#         await message.answer(
+#             "Пожалуйста, опишите событие.",
+#             reply_markup=ReplyKeyboardRemove(),
+#         )
+#         return
+#
+#     await state.update_data(event_type=event_type)
+#
+#     await message.answer(
+#         "📅 **Когда состоится событие?**\n"
+#         "Укажите дату и время проведения.",
+#         reply_markup=ReplyKeyboardRemove(),
+#         parse_mode=ParseMode.MARKDOWN,
+#     )
+#     await state.set_state(ContentGeneration.waiting_for_event_date)
+#
 
-    await state.update_data(event_type=event_type)
-
-    await message.answer(
-        "📅 **Когда состоится событие?**\n"
-        "Укажите дату и время проведения.",
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode=ParseMode.MARKDOWN,
-    )
-    await state.set_state(ContentGeneration.waiting_for_event_date)
-
-
-@new_generation_router.message(ContentGeneration.waiting_for_event_date, F.text)
-async def event_date_handler(message: Message, state: FSMContext):
-    """Обработчик для даты события."""
-    event_date = message.text.strip()
-    if not event_date:
-        await message.answer(
-            "Пожалуйста, укажите дату и время.",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return
-
-    await state.update_data(event_date=event_date)
-
-    await message.answer(
-        "📍 **Где состоится событие?**\n"
-        "Укажите место проведения.",
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode=ParseMode.MARKDOWN,
-    )
-    await state.set_state(ContentGeneration.waiting_for_event_place)
+# @new_generation_router.message(ContentGeneration.waiting_for_event_date, F.text)
+# async def event_date_handler(message: Message, state: FSMContext):
+#     """Обработчик для даты события."""
+#     event_date = message.text.strip()
+#     if not event_date:
+#         await message.answer(
+#             "Пожалуйста, укажите дату и время.",
+#             reply_markup=ReplyKeyboardRemove(),
+#         )
+#         return
+#
+#     await state.update_data(event_date=event_date)
+#
+#     await message.answer(
+#         "📍 **Где состоится событие?**\n"
+#         "Укажите место проведения.",
+#         reply_markup=ReplyKeyboardRemove(),
+#         parse_mode=ParseMode.MARKDOWN,
+#     )
+#     await state.set_state(ContentGeneration.waiting_for_event_place)
 
 
-@new_generation_router.message(ContentGeneration.waiting_for_event_place, F.text)
-async def event_place_handler(message: Message, state: FSMContext):
-    """Обработчик для места события."""
-    event_place = message.text.strip()
-    if not event_place:
-        await message.answer(
-            "Пожалуйста, укажите место проведения.",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return
-
-    await state.update_data(event_place=event_place)
-
-    await message.answer(
-        "👥 **Кто приглашен на событие?**\n"
-        "Укажите целевую аудиторию (например: волонтеры, дети, родители, пенсионеры).",
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode=ParseMode.MARKDOWN,
-    )
-    await state.set_state(ContentGeneration.waiting_for_event_audience)
+# @new_generation_router.message(ContentGeneration.waiting_for_event_place, F.text)
+# async def event_place_handler(message: Message, state: FSMContext):
+#     """Обработчик для места события."""
+#     event_place = message.text.strip()
+#     if not event_place:
+#         await message.answer(
+#             "Пожалуйста, укажите место проведения.",
+#             reply_markup=ReplyKeyboardRemove(),
+#         )
+#         return
+#
+#     await state.update_data(event_place=event_place)
+#
+#     await message.answer(
+#         "👥 **Кто приглашен на событие?**\n"
+#         "Укажите целевую аудиторию (например: волонтеры, дети, родители, пенсионеры).",
+#         reply_markup=ReplyKeyboardRemove(),
+#         parse_mode=ParseMode.MARKDOWN,
+#     )
+#     await state.set_state(ContentGeneration.waiting_for_event_audience)
 
 
 @new_generation_router.message(ContentGeneration.waiting_for_event_audience, F.text)
@@ -147,19 +147,19 @@ async def event_audience_handler(message: Message, state: FSMContext):
     await state.set_state(ContentGeneration.waiting_for_event_details)
 
 
-@new_generation_router.message(ContentGeneration.waiting_for_event_details, F.text)
-async def event_details_handler(message: Message, state: FSMContext):
-    """Обработчик для дополнительных деталей события."""
-    event_details = message.text.strip()
-
-    await state.update_data(event_details=event_details)
-
-    await message.answer(
-        "🎨 **Выберите стиль повествования поста**",
-        reply_markup=NARRATIVE_STYLE_KEYBOARD,
-        parse_mode=ParseMode.MARKDOWN,
-    )
-    await state.set_state(ContentGeneration.waiting_for_narrative_style)
+# @new_generation_router.message(ContentGeneration.waiting_for_event_details, F.text)
+# async def event_details_handler(message: Message, state: FSMContext):
+#     """Обработчик для дополнительных деталей события."""
+#     event_details = message.text.strip()
+#
+#     await state.update_data(event_details=event_details)
+#
+#     await message.answer(
+#         "🎨 **Выберите стиль повествования поста**",
+#         reply_markup=NARRATIVE_STYLE_KEYBOARD,
+#         parse_mode=ParseMode.MARKDOWN,
+#     )
+#     await state.set_state(ContentGeneration.waiting_for_narrative_style)
 
 
 
@@ -210,25 +210,25 @@ async def user_document_handler(message: Message, state: FSMContext):
 # СВОБОДНАЯ ФОРМА
 # ===============================
 
-@new_generation_router.message(ContentGeneration.waiting_for_user_description, F.text)
-async def user_description_handler(message: Message, state: FSMContext):
-    """Обработчик для описания пользователя в свободной форме."""
-    user_description = message.text.strip()
-    if not user_description:
-        await message.answer(
-            "Пожалуйста, опишите ваш пост.",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return
-
-    await state.update_data(user_text=user_description)
-
-    await message.answer(
-        "🎨 **Выберите стиль повествования поста**",
-        reply_markup=NARRATIVE_STYLE_KEYBOARD,
-        parse_mode=ParseMode.MARKDOWN,
-    )
-    await state.set_state(ContentGeneration.waiting_for_free_style)
+# @new_generation_router.message(ContentGeneration.waiting_for_user_description, F.text)
+# async def user_description_handler(message: Message, state: FSMContext):
+#     """Обработчик для описания пользователя в свободной форме."""
+#     user_description = message.text.strip()
+#     if not user_description:
+#         await message.answer(
+#             "Пожалуйста, опишите ваш пост.",
+#             reply_markup=ReplyKeyboardRemove(),
+#         )
+#         return
+#
+#     await state.update_data(user_text=user_description)
+#
+#     await message.answer(
+#         "🎨 **Выберите стиль повествования поста**",
+#         reply_markup=NARRATIVE_STYLE_KEYBOARD,
+#         parse_mode=ParseMode.MARKDOWN,
+#     )
+#     await state.set_state(ContentGeneration.waiting_for_free_style)
 
 
 

@@ -4,18 +4,6 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
 
-def get_wizard_image_management_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура управления сгенерированным изображением."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Перегенерировать", callback_data="wizard_image_regenerate")],
-            [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data="wizard_image_edit_prompt")],
-            [InlineKeyboardButton(text="🎨 Генерация карточки", callback_data="wizard_create_content")],
-            [InlineKeyboardButton(text="⬅️ К тексту", callback_data="wizard_back_to_text")],
-            [InlineKeyboardButton(text="↩️ К источнику", callback_data="wizard_back_to_image_source")]
-        ]
-    )
-
 
 def get_wizard_final_confirm_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура финального подтверждения и завершения Wizard."""

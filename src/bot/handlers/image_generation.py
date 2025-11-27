@@ -14,6 +14,7 @@ from services.text_generation import TextGenerationService
 
 from dtos import Dimensions
 
+
 BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
 
 image_generation_router = Router(name="image_generation")
@@ -286,8 +287,9 @@ async def describe_image_handler(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await state.set_state(ContentGeneration.waiting_for_image_description)
 
-    await callback.message.answer(
-        "🎨 **Опишите изображение**\n\n"
+    await callback.message.answer_photo(
+        photo=TEXT_SETUP_PHOTO,
+        caption="🎨 **Опишите изображение**\n\n"
         "Расскажите, какое изображение вы хотите получить. Будьте максимально подробны:\n\n"
         "• Какие объекты/люди должны быть на изображении?\n"
         "• Какое настроение/атмосфера?\n"
@@ -753,8 +755,9 @@ async def back_to_confirmation_handler(callback: CallbackQuery, state: FSMContex
 async def back_to_platform_handler(callback: CallbackQuery, state: FSMContext):
     """Возврат к выбору платформы."""
     await callback.answer()
-    await callback.message.answer(
-        "📱 **На какой платформе будет публиковаться пост?**",
+    await callback.message.answer_photo(
+        photo=PLATFORM_PHOTO,
+        caption="📱 **На какой платформе будет опубликован пост?**",
         reply_markup=PLATFORM_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
