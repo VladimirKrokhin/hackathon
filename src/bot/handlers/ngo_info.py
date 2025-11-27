@@ -246,11 +246,15 @@ async def view_ngo_handler(callback: CallbackQuery, state: FSMContext):
         return
 
 
+NGO_DONE_CALLBACK = "ngo_done"
+NGO_CANCEL_CALLBACK = "ngo_cancel"
+NGO_SKIP_CALLBACK = "ngo_skip"
+
 NGO_NAVIGATION_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="ngo_cancel")],
-        [InlineKeyboardButton(text="⏩ Пропустить", callback_data="ngo_skip")],
-        [InlineKeyboardButton(text="✅ Готово", callback_data="ngo_done")]
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=NGO_CANCEL_CALLBACK)],
+        [InlineKeyboardButton(text="⏩ Пропустить", callback_data=NGO_SKIP_CALLBACK)],
+        [InlineKeyboardButton(text="✅ Готово", callback_data=NGO_DONE_CALLBACK)]
     ]
 )
 
@@ -271,7 +275,7 @@ async def fill_ngo_handler(callback: CallbackQuery, state: FSMContext):
 
 
 # FIXME: Этот колбэк используется
-@ngo_info_router.callback_query(F.data == "ngo_done")
+@ngo_info_router.callback_query(F.data == NGO_DONE_CALLBACK)
 async def ngo_done_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик завершения и подтверждения данных НКО."""
     await callback.answer()
@@ -316,5 +320,70 @@ async def ngo_done_handler(callback: CallbackQuery, state: FSMContext):
         # Просто завершение текущего процесса
         await state.clear()
         await start_handler(callback.message, state)
+
+
+
+@ngo_info_router.callback_query(F.data == NGO_CANCEL_CALLBACK)
+async def ngo_cancel_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик отмены процесса НКО."""
+    await callback.answer()
+    await state.clear()
+    from bot.handlers.start import BACK_TO_START_KEYBOARD
+
+    await callback.message.answer(
+        "❎ Процесс сбора информации об НКО отменен.",
+        reply_markup=BACK_TO_START_KEYBOARD,
+    )
+
+@ngo_info_router.callback_query(F.data == NGO_SKIP_CALLBACK)
+async def ngo_skip_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик пропуска шага в процессе НКО."""
+    await callback.answer()
+
+    current_state = await state.get_state()
+
+    if current_state == NGOInfo.waiting_for_ngo_description:
+        await state.update_data(ngo_description="Не указано")
+        await callback.message.answer(
+            f"✅ Описание: Не указано\n\n"
+            "🎯 Какие формы деятельности ведет ваша НКО? (например: благотворительность, просвещение, помощь животным и т.д.)\n\n"
+            "Можете перечислить через запятую или нажать ⏩ Пропустить.",
+            reply_markup=NGO_NAVIGATION_KEYBOARD,
+        )
+        await state.set_state(NGOInfo.waiting_for_ngo_activities)
+
+    elif current_state == NGOInfo.waiting_for_ngo_activities:
+        await state.update_data(ngo_activities="Не указано")
+        await callback.message.answer(
+            f"✅ Формы деятельности: Не указано\n\n"
+            "📞 Укажите контактную информацию для связи (телефон, email, сайт или социальные сети)\n\n"
+            "Можете указать любые удобные способы связи или нажать ⏩ Пропустить.",
+            reply_markup=NGO_NAVIGATION_KEYBOARD,
+        )
+        await state.set_state(NGOInfo.waiting_for_ngo_contact)
+
+    elif current_state == NGOInfo.waiting_for_ngo_contact:
+        await state.update_data(ngo_contact="Не указано")
+        # Показываем итоговую информацию для подтверждения
+        data = await state.get_data()
+        name = data.get("ngo_name", "")
+        description = data.get("ngo_description", "Не указано")
+        activities = data.get("ngo_activities", "Не указано")
+        contact_info = "Не указано"
+
+        summary = (
+            f"🏢 **Информация о НКО \"{name}\"**\n\n"
+            f"📝 **Описание:** {description}\n\n"
+            f"🎯 **Деятельность:** {activities}\n\n"
+            f"📞 **Контакты:** {contact_info}\n\n"
+            "Подтверждаете данные? Их можно будет изменить позже."
+        )
+
+        await callback.message.answer(
+            summary,
+            reply_markup=NGO_NAVIGATION_KEYBOARD,
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
 
 

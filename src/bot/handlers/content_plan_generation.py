@@ -121,7 +121,6 @@ def format_content_plan(plan: ContentPlan) -> str:
     return "\n".join(lines)
 
 
-# FIXME: не работает, пока не изменен ContentPlanService.generate_content_plan на возврат экземпляра ContentPlan вместо str
 async def generate_and_save_plan(message: Message, state: FSMContext, data: dict) -> None:
     """
     Общая функция для генерации и сохранения контент-плана
@@ -142,9 +141,6 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
         "Ваш контент-план:",
         reply_markup=ReplyKeyboardRemove(),
     )
-
-    # TODO: Правильно распарси контент-план в текстовое представление
-    # TODO: для пользователя и сначала запроси у пользователя подтверждение
 
     await message.answer(
         format_content_plan(generated_plan),
