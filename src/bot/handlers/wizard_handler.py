@@ -8,19 +8,20 @@ from aiogram.types.inline_keyboard_button import InlineKeyboardButton
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 
 from bot import dispatcher
-from bot.handlers.start import BACK_TO_START_KEYBOARD
 from bot.states import ContentWizard
 from services.ngo_service import NGOService
 
 from services.card_generation import CardGenerationService
 from services.text_generation import TextGenerationService
 
-from bot.handlers.start import BACK_TO_START_MENU_CALLBACK_DATA
+BACK_TO_START_MENU_CALLBACK_DATA = "back_to_start_menu"
 
 logger = logging.getLogger(__name__)
 
 create_content_wizard = Router(name="wizard")
 
+
+WIZARD_CREATE_CONTENT = "create_content_wizard"
 
 # ===== ЭТАП 1: ЗАПУСК WIZARD =====
 
@@ -33,7 +34,7 @@ CONTENT_WIZARD_SELECT_MODE_KEYBOARD: InlineKeyboardMarkup = InlineKeyboardMarkup
         ]
     )
 
-@create_content_wizard.callback_query(F.data == "create_content_wizard")
+@create_content_wizard.callback_query(F.data == WIZARD_CREATE_CONTENT)
 async def start_wizard_handler(callback: CallbackQuery, state: FSMContext):
     """Запуск Мастера для создания контента."""
     await callback.answer()
@@ -60,6 +61,7 @@ async def start_wizard_handler(callback: CallbackQuery, state: FSMContext):
 @create_content_wizard.callback_query(F.data == "create_content_wizard_structured")
 async def wizard_structured_mode_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора структурированной формы."""
+    from bot.handlers.start import BACK_TO_START_KEYBOARD
     await callback.answer()
     await state.update_data(create_content_wizard_mode="structured")
 
@@ -342,6 +344,17 @@ async def wizard_platform_website_handler(callback: CallbackQuery, state: FSMCon
     await wizard_start_text_generation(callback.message, state)
 
 
+WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перегенерировать", callback_data="wizard_text_regenerate")],
+        [InlineKeyboardButton(text="✏️ Исправить текст", callback_data="wizard_text_edit")],
+        [InlineKeyboardButton(text="⚙️ Изменить параметры", callback_data="wizard_text_change_fields")],
+        [InlineKeyboardButton(text="🎨 Генерация карточки", callback_data="wizard_to_image")],
+        [InlineKeyboardButton(text="⬅️ Назад к настройкам", callback_data="wizard_back_to_setup")]
+    ]
+)
+
+
 async def wizard_start_text_generation(message_or_callback, state: FSMContext):
     """Запуск генерации текста."""
     await message_or_callback.answer(
@@ -391,7 +404,7 @@ async def wizard_start_text_generation(message_or_callback, state: FSMContext):
         )
         await message_or_callback.answer(
             "**Что делать с текстом?**",
-            reply_markup=get_wizard_text_management_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_result)
@@ -433,6 +446,21 @@ async def wizard_text_edit_handler(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ContentWizard.waiting_for_wizard_text_edit)
 
 
+WIZARD_CONTENT_GENERATION_FIELD_SELECT_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="📝 Тип события", callback_data="wizard_edit_event_type")],
+        [InlineKeyboardButton(text="📅 Дата события", callback_data="wizard_edit_event_date")],
+        [InlineKeyboardButton(text="📍 Место события", callback_data="wizard_edit_event_place")],
+        [InlineKeyboardButton(text="👥 Аудитория", callback_data="wizard_edit_event_audience")],
+        [InlineKeyboardButton(text="📝 Детали события", callback_data="wizard_edit_event_details")],
+        [InlineKeyboardButton(text="🎨 Стиль повествования", callback_data="wizard_edit_narrative_style")],
+        [InlineKeyboardButton(text="📱 Платформа", callback_data="wizard_edit_platform")],
+        [InlineKeyboardButton(text="✅ Сохранить и вернуться", callback_data="wizard_back_to_text_result")],
+        [InlineKeyboardButton(text="⬅️ Назад к тексту", callback_data="wizard_back_to_text_result")]
+    ]
+)
+
+
 @create_content_wizard.callback_query(F.data == "wizard_text_change_fields")
 async def wizard_text_change_fields_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик изменения параметров структурированной формы."""
@@ -445,7 +473,7 @@ async def wizard_text_change_fields_handler(callback: CallbackQuery, state: FSMC
         await callback.message.answer(
             "⚙️ **Изменение параметров**\n\n"
             "Выберите, какое поле хотите изменить:",
-            reply_markup=get_wizard_field_select_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_FIELD_SELECT_KEYBOARD,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_field_select)
     else:
@@ -562,7 +590,7 @@ async def wizard_text_edit_handler(message: Message, state: FSMContext):
             "✅ **Текст отредактирован!**\n\n"
             f"{edited_text}\n\n"
             "**Что делать с текстом?**",
-            reply_markup=get_wizard_text_management_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_result)
@@ -571,7 +599,7 @@ async def wizard_text_edit_handler(message: Message, state: FSMContext):
         logger.exception(f"Ошибка редактирования текста: {e}")
         await message.answer(
             "❌ Ошибка редактирования текста. Попробуйте снова.",
-            reply_markup=get_wizard_text_management_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
         )
 
 
@@ -671,7 +699,7 @@ async def wizard_back_to_text_result_handler(callback: CallbackQuery, state: FSM
     generated_text = data.get("generated_text", "")
     await callback.message.answer(
         f"✅ **Текст поста:**\n\n{generated_text}\n\n**Что делать с текстом?**",
-        reply_markup=get_wizard_text_management_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_text_result)
@@ -787,6 +815,16 @@ async def wizard_image_none_handler(callback: CallbackQuery, state: FSMContext):
 
 # ===== ОБРАБОТКА ПРОМПТА ИЗОБРАЖЕНИЯ =====
 
+WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перегенерировать промпт", callback_data="wizard_prompt_regenerate")],
+        [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data="wizard_prompt_edit")],
+        [InlineKeyboardButton(text="✅ Сгенерировать изображение", callback_data="wizard_generate_image")],
+        [InlineKeyboardButton(text="⬅️ К источнику изображения", callback_data="wizard_back_to_image_source")]
+    ]
+)
+
+
 @create_content_wizard.message(ContentWizard.waiting_for_wizard_image_prompt, F.text)
 async def wizard_image_prompt_handler(message: Message, state: FSMContext):
     """Обработка описания изображения."""
@@ -836,7 +874,7 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
             "✅ **Улучшенный промпт готов:**\n\n"
             f"```\n{enhanced_prompt}\n```\n\n"
             "**Что делать с промптом?**",
-            reply_markup=get_wizard_image_prompt_preview_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.update_data(enhanced_image_prompt=enhanced_prompt)
@@ -846,7 +884,7 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
         logger.exception(f"Ошибка улучшения промпта: {e}")
         await message.answer(
             "⚠️ Не удалось улучшить промпт. Продолжаем с оригиналом.",
-            reply_markup=get_wizard_image_prompt_preview_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_image_prompt_edit)
 
@@ -1050,7 +1088,7 @@ async def wizard_back_to_text_handler(callback: CallbackQuery, state: FSMContext
         "✅ **Текст поста:**\n\n"
         f"{generated_text}\n\n"
         "**Что делать с текстом?**",
-        reply_markup=get_wizard_text_management_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_text_result)
@@ -1064,7 +1102,7 @@ async def wizard_modify_settings_handler(callback: CallbackQuery, state: FSMCont
     await callback.message.answer(
         "⚙️ **Модификация настроек**\n\n"
         "Возврат к этапу настройки параметров. Что хотите изменить?",
-        reply_markup=get_wizard_field_select_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_FIELD_SELECT_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_field_select)
@@ -1320,7 +1358,7 @@ async def wizard_image_prompt_edit_handler(message: Message, state: FSMContext):
         "✅ **Обновленный промпт:**\n\n"
         f"```\n{enhanced_prompt}\n```\n\n"
         "**Что делать с промптом?**",
-        reply_markup=get_wizard_image_prompt_preview_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
 

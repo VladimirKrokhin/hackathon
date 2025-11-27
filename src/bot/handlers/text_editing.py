@@ -3,24 +3,23 @@ import logging
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums.parse_mode import ParseMode
 
-from bot import dispatcher
-from bot.handlers.content_plan_generation import SKIP_KEYBOARD
-from bot.handlers.start import BACK_TO_START_KEYBOARD
-from bot.states import EditText
 from services.text_generation import TextGenerationService
+from services.ngo_service import NGOService
 
-from src.services.ngo_service import NGOService
+from bot import dispatcher
+from bot.states import EditText
 
 text_editing_router = Router(name="text_editing")
 logger = logging.getLogger(__name__)
 
-
+EDIT_TEXT_CALLBACK_DATA = "edit_text"
 
 @text_editing_router.message(EditText.waiting_for_text, F.text)
 async def text_handler(message: Message, state: FSMContext):
+    from bot.handlers.start import BACK_TO_START_KEYBOARD
 
     text_to_edit = message.text.strip()
     if not text_to_edit:
@@ -68,6 +67,8 @@ async def text_handler(message: Message, state: FSMContext):
 
 @text_editing_router.message(EditText.waiting_for_details, F.text)
 async def details_handler(message: Message, state: FSMContext):
+    from bot.handlers.start import BACK_TO_START_KEYBOARD
+
     details = message.text.strip()
     if details == "⏭️ Пропустить уточнения":
         details = ""

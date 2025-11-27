@@ -7,13 +7,15 @@ from aiogram.filters import CommandStart
 from aiogram.types import FSInputFile, Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
-from bot import dispatcher
-from bot.handlers.ngo_info import VIEW_NGO_INFO_CALLBACK_DATA
 from models import Ngo
 from services.ngo_service import NGOService
 
+from bot import dispatcher
+from bot.handlers.ngo_info import VIEW_NGO_INFO_CALLBACK_DATA
 from bot.handlers.content_plan_menu import CONTENT_PLAN_MENU_CALLBACK_DATA
 from bot.handlers.image_generation import GENERATE_IMAGES_CALLBACK_DATA
+from bot.handlers.text_editing import EDIT_TEXT_CALLBACK_DATA
+from bot.handlers.wizard_handler import WIZARD_CREATE_CONTENT
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +41,9 @@ ABOUT_PHOTO = FSInputFile(path=ABOUT_PHOTO_PATH)
 
 START_MENU_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="📝 Создание контента", callback_data="create_content_wizard")],
+        [InlineKeyboardButton(text="📝 Создание контента", callback_data=WIZARD_CREATE_CONTENT)],
         [InlineKeyboardButton(text="📅 Управление контент-планами", callback_data=CONTENT_PLAN_MENU_CALLBACK_DATA)],
-        [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data="edit_text")],
+        [InlineKeyboardButton(text="✏️ Редактировать текст", callback_data=EDIT_TEXT_CALLBACK_DATA)],
         [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data=GENERATE_IMAGES_CALLBACK_DATA)],
         [InlineKeyboardButton(text="📋 Информация о НКО", callback_data=VIEW_NGO_INFO_CALLBACK_DATA)],
     ]
