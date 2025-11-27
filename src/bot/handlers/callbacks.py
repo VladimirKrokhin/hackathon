@@ -100,16 +100,6 @@ async def narrative_style_handler_common(callback: CallbackQuery, state: FSMCont
 
 
 
-
-
-
-# === ОБРАБОТЧИКИ ВЫБОРА ПЛАТФОРМЫ ===
-
-
-
-
-
-
 # === ЛОКАЛЬНЫЕ ФУНКЦИИ ДЛЯ ГЕНЕРАЦИИ КОНТЕНТА ===
 
 async def structured_generation_handler(message: Message, state: FSMContext):

@@ -12,6 +12,8 @@ from services.image_generation import ImageGenerationService
 from services.ngo_service import NGOService
 from services.text_generation import TextGenerationService
 
+from dtos import Dimensions
+
 BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
 
 image_generation_router = Router(name="image_generation")
@@ -655,8 +657,10 @@ async def generate_final_image(callback: CallbackQuery, state: FSMContext, width
         # Генерируем изображение
         image_bytes = await image_service.generate_image(
             prompt=prompt,
-            width=width,
-            height=height,
+            dimensions=Dimensions(
+                width=width,
+                height=height,
+            )
         )
 
         # Создаем файл для отправки
