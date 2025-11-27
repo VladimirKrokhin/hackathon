@@ -115,6 +115,9 @@ class ContentPlan(StatesGroup):
     waiting_for_themes = State()
     waiting_for_details = State()
 
+    # Редактирование сгенерированного поста
+    waiting_for_text_edit = State()
+
 
 class EditText(StatesGroup):
     """
