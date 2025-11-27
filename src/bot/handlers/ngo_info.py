@@ -33,6 +33,12 @@ NGO_INFO_MENU_KEYBOARD = InlineKeyboardMarkup(
     ]
 )
 
+NGO_BACK_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)],
+    ]
+)
+
 FILL_NGO_INFO_CALLBACK_DATA = "fill_ngo"
 
 NGO_INFO_MENU_KEYBOARD_NO_NGO = InlineKeyboardMarkup(
@@ -55,7 +61,7 @@ async def update_ngo_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "🔄 Обновление данных НКО\n\n"
         "Введите новое название НКО (или текущее, если не хотите менять):",
-        reply_markup=NGO_NAVIGATION_KEYBOARD,
+        reply_markup=NGO_CANCEL_KEYBOARD,
     )
 
 # FIXME: этот обработчик используется
@@ -156,7 +162,7 @@ async def ngo_contact_handler(message: Message, state: FSMContext):
     await message.answer(
         summary,
         # FIXME: оставь клавиатуру "Подтверить" или что-то другое...
-        reply_markup=NGO_NAVIGATION_KEYBOARD,
+        reply_markup=NGO_BACK_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
@@ -233,7 +239,7 @@ async def view_ngo_handler(callback: CallbackQuery, state: FSMContext):
 
         await callback.message.answer(
             summary + "\n\nВыберите действие:",
-            reply_markup=NGO_INFO_MENU_KEYBOARD,
+            reply_markup=NGO_BACK_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -255,6 +261,12 @@ NGO_NAVIGATION_KEYBOARD = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="❌ Отмена", callback_data=NGO_CANCEL_CALLBACK)],
         [InlineKeyboardButton(text="⏩ Пропустить", callback_data=NGO_SKIP_CALLBACK)],
         [InlineKeyboardButton(text="✅ Готово", callback_data=NGO_DONE_CALLBACK)]
+    ]
+)
+
+NGO_CANCEL_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=NGO_CANCEL_CALLBACK)],
     ]
 )
 
@@ -328,12 +340,15 @@ async def ngo_cancel_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик отмены процесса НКО."""
     await callback.answer()
     await state.clear()
-    from bot.handlers.start import BACK_TO_START_KEYBOARD
+
+    from bot.handlers.start import start_handler
 
     await callback.message.answer(
         "❎ Процесс сбора информации об НКО отменен.",
-        reply_markup=BACK_TO_START_KEYBOARD,
     )
+
+    start_handler(callback.message, state)
+
 
 @ngo_info_router.callback_query(F.data == NGO_SKIP_CALLBACK)
 async def ngo_skip_handler(callback: CallbackQuery, state: FSMContext):

@@ -16,6 +16,44 @@ logger = logging.getLogger(__name__)
 new_generation_router = Router(name="new_generation")
 
 
+async def structured_generation_handler(message: Message, state: FSMContext):
+    """Прямой запуск структурированной формы генерации контента."""
+    await message.answer(
+        "📝 Отлично! Начинаем структурированную форму.\n\n"
+        "**Что за событие?**\n"
+        "Опишите коротко, о каком событии будет пост.",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+    await state.set_state(ContentGeneration.waiting_for_event_type)
+
+
+async def free_form_generation_handler(message: Message, state: FSMContext):
+    """Прямой запуск свободной формы генерации контента."""
+    await message.answer(
+        "💭 Понятно! Используем свободную форму.\n\n"
+        "**Опишите ваш пост**\n"
+        "Расскажите подробно, о чём будет пост, какую информацию нужно донести.",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    await state.set_state(ContentGeneration.waiting_for_user_description)
+
+
+@new_generation_router.callback_query(F.data == "no")
+async def no_handler(callback: CallbackQuery, state: FSMContext):
+    """Обработчик ответа 'Нет'."""
+    await callback.answer()
+    data = await state.get_data()
+    generation_mode = data.get("generation_mode", "")
+
+    if generation_mode == "structured":
+        # Переход к структурированной форме без НКО
+        await structured_generation_handler(callback.message, state)
+    elif generation_mode == "free_form":
+        # Переход к свободной форме без НКО
+        await free_form_generation_handler(callback.message, state)
+
 
 # ===============================
 # СТРУКТУРИРОВАННАЯ ФОРМА

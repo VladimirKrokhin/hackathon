@@ -5,10 +5,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.enums.parse_mode import ParseMode
 
-from src.bot import dispatcher
-from src.bot.handlers.callbacks import POST_GENERATION_KEYBOARD
-from src.bot.states import ContentGeneration
-from src.services.text_generation import TextGenerationService
+from bot import dispatcher
+from bot.handlers.image_generation import POST_GENERATION_KEYBOARD
+from bot.states import ContentGeneration
+from services.text_generation import TextGenerationService
 
 refactoring_router = Router(name="refactoring")
 

@@ -7,7 +7,6 @@ from .wizard_handler import create_content_wizard
 from .new_generation import  new_generation_router
 from .content_plan_generation import content_plan_router
 from .content_plan_menu import content_plan_menu_router
-from .callbacks import callbacks_router
 from .fallback import fallback_router
 
 # Создаем основной роутер и включаем в него все остальные роутеры
@@ -19,7 +18,6 @@ router.include_router(image_generation_router)
 router.include_router(create_content_wizard)
 router.include_router(content_plan_router)
 router.include_router(content_plan_menu_router)
-router.include_router(callbacks_router)
 router.include_router(fallback_router)
 
 __all__ = [

@@ -893,8 +893,6 @@ async def handle_card_user_document(message: Message, state: FSMContext):
 
 # === ДОБАВЛЕННЫЕ ОБРАБОТЧИКИ КОНТЕНТ-ПЛАНА ===
 # TODO: Эти обработчики нужно добавить в content_plan_generation.py как message handlers
-# Сейчас они удалены из callbacks.py, поскольку @callbacks_router.callback_query не подходит для текстовых сообщений
-
 
 
 # FIXME: не используются
