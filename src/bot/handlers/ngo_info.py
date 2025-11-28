@@ -20,6 +20,8 @@ ngo_info_router = Router(name="ngo_info")
 logger = logging.getLogger(__name__)
 
 
+NGO_DONE_CALLBACK = "ngo_done"
+
 UPDATE_NGO_CONTENT_CALLBACK_DATA = "update_ngo"
 VIEW_NGO_INFO_CALLBACK_DATA = "ngo_info"
 
@@ -159,10 +161,14 @@ async def ngo_contact_handler(message: Message, state: FSMContext):
         "Подтверждаете данные? Их можно будет изменить позже."
     )
 
+    keyboard = NGO_BACK_KEYBOARD.inline_keyboard.append(
+        [InlineKeyboardButton(text="✅ Готово", callback_data=NGO_DONE_CALLBACK)]
+    )
+
     await message.answer(
         summary,
         # FIXME: оставь клавиатуру "Подтверить" или что-то другое...
-        reply_markup=NGO_BACK_KEYBOARD,
+        reply_markup=keyboard,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
@@ -252,7 +258,6 @@ async def view_ngo_handler(callback: CallbackQuery, state: FSMContext):
         return
 
 
-NGO_DONE_CALLBACK = "ngo_done"
 NGO_CANCEL_CALLBACK = "ngo_cancel"
 NGO_SKIP_CALLBACK = "ngo_skip"
 
@@ -385,6 +390,16 @@ async def ngo_skip_handler(callback: CallbackQuery, state: FSMContext):
         description = data.get("ngo_description", "Не указано")
         activities = data.get("ngo_activities", "Не указано")
         contact_info = "Не указано"
+
+        ngo_info = Ngo(
+            id_=None,
+            user_id=callback.from_user.id,
+            name=name,
+            description=description,
+            activities=activities,
+            contacts=contact_info
+        )
+        await state.update_data(ngo_info=ngo_info)
 
         summary = (
             f"🏢 **Информация о НКО \"{name}\"**\n\n"
