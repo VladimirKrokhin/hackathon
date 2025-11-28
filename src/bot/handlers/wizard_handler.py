@@ -1185,7 +1185,7 @@ WIZARD_CARD_READY_KEYBOARD = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="🔄 Перегенерировать карточки", callback_data="wizard_regenerate_card")],
         [InlineKeyboardButton(text="✏️ Изменить текст карточки", callback_data="wizard_edit_card_text")],
         [InlineKeyboardButton(text="📝 Написать промпт для карточки", callback_data="wizard_write_card_prompt")],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="wizard_back_to_main")]
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)]
     ]
 )
 
