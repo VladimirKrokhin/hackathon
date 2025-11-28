@@ -3,6 +3,8 @@ from enum import StrEnum, auto
 from pathlib import Path
 from typing import Optional, Mapping, Any
 
+from aiogram.types import FSInputFile
+
 
 @dataclass(frozen=True)
 class Dimensions:
@@ -24,7 +26,7 @@ class NgoData:
 
 @dataclass(frozen=True)
 class CardData:
-    image_path: Path
+    image: FSInputFile
     title: str
     ngo_data: Optional[NgoData]
     event_data: Optional[EventData]

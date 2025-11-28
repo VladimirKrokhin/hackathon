@@ -7,23 +7,20 @@ from aiogram.enums.parse_mode import ParseMode
 from aiogram.types.inline_keyboard_button import InlineKeyboardButton
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 
-from bot import dispatcher
-from bot.states import ContentWizard
-from services.ngo_service import NGOService
 
+from models import Ngo
+from dtos import PromptContext, Dimensions
+
+from bot import dispatcher,bot
+from bot.states import ContentWizard, ContentGeneration
+from bot.assets import TEXT_SETUP_PHOTO, CALENDAR_PHOTO, LOCATION_PHOTO, INSPECT_PHOTO, NARRATIVE_STYLE_PHOTO, \
+    PLATFORM_PHOTO, TEXT_GENERATION_PHOTO, IMAGE_GENERATION_PHOTO, CARD_GENERATION_PHOTO
+
+from services.ngo_service import NGOService
 from services.card_generation import CardGenerationService
 from services.text_generation import TextGenerationService
 
-from bot.states import ContentGeneration
-
-from models import Ngo
-
-from bot import bot
-
-from dtos import PromptContext
-
-from bot.assets import TEXT_SETUP_PHOTO, CALENDAR_PHOTO, LOCATION_PHOTO, INSPECT_PHOTO, NARRATIVE_STYLE_PHOTO, \
-    PLATFORM_PHOTO, TEXT_GENERATION_PHOTO, IMAGE_GENERATION_PHOTO, CARD_GENERATION_PHOTO
+from dtos import RenderParameters, CardTemplate, CardData, EventData
 
 BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
 
@@ -720,9 +717,9 @@ async def wizard_edit_narrative_style_handler(callback: CallbackQuery, state: FS
 
 PLATFORM_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="📱 ВКонтакте (для молодежи)", callback_data="platform_vk")],
+        # [InlineKeyboardButton(text="📱 ВКонтакте (для молодежи)", callback_data="platform_vk")],
         [InlineKeyboardButton(text="💬 Telegram (для взрослых/бизнеса)", callback_data="platform_telegram")],
-        [InlineKeyboardButton(text="🌐 Сайт (для информационных материалов)", callback_data="platform_website")],
+        # [InlineKeyboardButton(text="🌐 Сайт (для информационных материалов)", callback_data="platform_website")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_previous")]
     ]
 )
@@ -1009,8 +1006,10 @@ async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMConte
 
         generated_image = await image_generation_service.generate_image(
             prompt=image_prompt,
-            width=1024,
-            height=768
+            dimensions=Dimensions(
+                width=1024,
+                height=1024,
+            ),
         )
 
         await state.update_data(generated_image=generated_image)
@@ -1203,6 +1202,7 @@ async def wizard_back_to_image_handler(callback: CallbackQuery, state: FSMContex
     await state.set_state(ContentWizard.waiting_for_wizard_image_source)
 
 
+# FIXME: этот обработчик используется
 @create_content_wizard.callback_query(F.data == "wizard_create_content")
 async def wizard_create_content_handler(callback: CallbackQuery, state: FSMContext):
     """Финальная генерация только карточек (текст уже готов)."""
@@ -1219,32 +1219,25 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
     try:
         # Получаем сохраненные данные из Wizard
         data = await state.get_data()
-        generated_text = data.get("generated_text", "")
-        platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
+        generated_text = data["generated_text"]
 
         # Получаем информацию об НКО из базы данных
         ngo_service = dispatcher["ngo_service"]
         user_id = callback.from_user.id
-        ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
+        ngo_data: Ngo = ngo_service.get_ngo_data_by_user_id(user_id)
 
-        # Устанавливаем значения по умолчанию
-        ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
-        ngo_contact = ngo_data.get("ngo_contact", "тел: +7 (XXX) XXX-XX-XX") if ngo_data else "тел: +7 (XXX) XXX-XX-XX"
 
         # Получаем изображение (уже должно быть сгенерировано на предыдущих этапах)
         generated_image = None
-        image_source = data.get("image_source", "")
+        image_source = data["image_source"]
         if image_source == "🤖 Сгенерировать ИИ":
-            generated_image = data.get("generated_image")
+            generated_image = data["generated_image"]
         elif image_source == "📎 Загрузить своё":
-            generated_image = data.get("user_image")
+            generated_image = data["user_image"]
 
         # Определяем подзаголовок в зависимости от режима
-        wizard_mode = data.get("wizard_mode", "structured")
-        if wizard_mode == "structured":
-            subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
-        else:
-            subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
+        wizard_mode = data["wizard_mode"]
+
 
         # Создаем краткий контент для карточки
         await callback.message.answer(
@@ -1256,7 +1249,9 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
             # Генерируем сокращенный контент специально для карточки
             card_text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
             card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
-            card_content = await card_generation_service.generate_card_text(data, generated_text)
+
+            card_text_generation_context = PromptContext.from_dict(data)
+            card_content = await card_generation_service.generate_card_text(card_text_generation_context, generated_text)
 
             # Используем сгенерированный сокращенный контент, если он получился подходящим
             if card_content and len(card_content.strip()) > 10 and len(card_content.strip()) < 300:
@@ -1283,82 +1278,43 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
             reply_markup=ReplyKeyboardRemove(),
         )
 
-        try:
-            # Используем GPT для генерации привлекательного заголовка
-            title_generation_prompt = (
-                f"Исходный текст поста: {card_content_for_template}\n\n"
-                "Создай короткий, привлекательный заголовок (5-7 слов) для информационной карточки НКО. "
-                "Заголовок должен быть ярким, мотивирующим и побуждать к участию. "
-                "Не добавляй кавычки в ответе."
-            )
-
-            title = await card_text_generation_service.generate_text(title_generation_prompt, title_generation_prompt)
-
-            # Очищаем и ограничиваем длину заголовка
-            if title:
-                title = title.strip()
-                if len(title) > 50:  # Ограничиваем длину
-                    title = title[:47] + "..."
-            else:
-                # Fallback если GPT не сгенерировал заголовок
-                title = data.get('event_type', 'Событие НКО')[:30] + "..."
-
-            await callback.message.answer(
-                f"✅ Заголовок готов: **{title}**",
-                reply_markup=ReplyKeyboardRemove(),
-                parse_mode=ParseMode.MARKDOWN,
-            )
-
-        except Exception as e:
-            logger.exception("Ошибка генерации заголовка для карточки, используем fallback")
-            # Fallback заголовок
-            title = data.get('event_type', 'Событие НКО')[:30] + "..."
-            if len(title) <= 3 or title == "...":  # Если получился слишком короткий
-                title = "Присоединяйтесь к событию!"
-
-        # Подготавливаем данные для генерации карточек
-
-
-
-        template_data = {
-            "title": title,
-            "subtitle": subtitle or "",
-            "content": card_content_for_template,
-            "org_name": ngo_name or "Ваша НКО",
-            "contact_info": ngo_contact or "",
-            "text_color": "#333333",
-        }
-
-        # Добавляем специфические данные для структурированной формы
-        if wizard_mode == "structured":
-            template_data.update({
-                "event_type": data['event_type'],
-                "event_date": data['event_date'],
-                "event_place": data['event_place'],
-                "event_audience": data['event_audience'],
-                "event_details": data['event_details'],
-                "narrative_style": data['narrative_style'],
-            })
-
-        # Добавляем данные для свободной формы
-        if wizard_mode == "free_form":
-            template_data.update({
-                "user_description": data['user_description'],
-                "narrative_style": data['narrative_style'],
-            })
-
-        # Добавляем изображение для фона карточки
-        if generated_image:
-            template_data["background_image_bytes"] = generated_image
-            logger.info(f"Фоновое изображение добавлено: {len(generated_image)} байт")
-
 
         card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
 
+        # FIXME: Телеграм захардкожен
+        parameters = RenderParameters(
+            template=CardTemplate.TELEGRAM
+        )
+
+
+        print(data)
+
+
+        title = await card_generation_service.generate_card_title(card_text_generation_context)
+
+        # Устанавливаем значения по умолчанию
+        ngo_name = ngo_data.name
+        ngo_contact = ngo_data.contacts
+        platform = data["platform"]
+
+
+        event_data = EventData(
+            timestamp=None,
+            location=None,
+            audience=None,
+        )
+
+
+        card_data = CardData(
+            image=generated_image,
+            title=title,
+            ngo_data=ngo_data,
+            event_data=event_data,
+        )
 
         card = await card_generation_service.generate_card(
             parameters,
-            data
+            card_data
         )
 
 
@@ -1622,10 +1578,13 @@ async def wizard_generate_card_from_prompt_handler(message: Message, state: FSMC
 
 async def wizard_regenerate_card_from_text(message: Message, state: FSMContext, card_text: str):
     """Перегенерация карточек с указанным текстом."""
+
+    card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
+
     try:
         # Получаем сохраненные данные из Wizard
         data = await state.get_data()
-        platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
+        platform = data["platform"]
 
         # Получаем информацию об НКО из базы данных
         ngo_service: TextGenerationService = dispatcher["ngo_service"]
@@ -1633,23 +1592,23 @@ async def wizard_regenerate_card_from_text(message: Message, state: FSMContext, 
         ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
 
         # Устанавливаем значения по умолчанию
-        ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
-        ngo_contact = ngo_data.get("ngo_contact", "тел: +7 (XXX) XXX-XX-XX") if ngo_data else "тел: +7 (XXX) XXX-XX-XX"
+        ngo_name = ngo_data.name
+        ngo_contact = ngo_data.contacts
 
         # Получаем изображение
         generated_image = None
-        image_source = data.get("image_source", "")
+        image_source = data["image_source"]
         if image_source == "🤖 Сгенерировать ИИ":
-            generated_image = data.get("generated_image")
+            generated_image = data["generated_image"]
         elif image_source == "📎 Загрузить своё":
-            generated_image = data.get("user_image")
+            generated_image = data["user_image"]
 
         # Определяем подзаголовок в зависимости от режима
-        wizard_mode = data.get("wizard_mode", "structured")
+        wizard_mode = data["wizard_mode"]
         if wizard_mode == "structured":
-            subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
+            subtitle = f"Событие: {data['event_type']}"
         else:
-            subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
+            subtitle = f"Для {data['event_audience']}"
 
         # Генерируем заголовок для карточки на основе текста
         await message.answer(
@@ -1666,7 +1625,7 @@ async def wizard_regenerate_card_from_text(message: Message, state: FSMContext, 
                 "Не добавляй кавычки в ответе."
             )
 
-            title = await card_text_generation_service.generate_text(title_generation_prompt, title_generation_prompt)
+            title = await card_generation_service.generate_text(title_generation_prompt, title_generation_prompt)
 
             # Очищаем и ограничиваем длину заголовка
             if title:

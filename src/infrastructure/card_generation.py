@@ -17,7 +17,7 @@ import re
 import io
 from PIL import Image, ImageDraw, ImageFont, ImageColor
 
-from dtos import CardData, RenderParameters
+from dtos import CardData, RenderParameters, Dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +332,11 @@ class PillowCardGenerator(BaseCardGenerator):
 
             template_data = {**defaults, **data}
 
-            logger.info(f"Генерация карточки PIL: {template_name}, размер {width}x{height}")
+            logger.info(f"Генерация карточки PIL.")
+
+            # FIXME: размер захарддкожен
+            width = 1080
+            height = 1528
 
             # Создание основного изображения
             img = Image.new('RGBA', (width, height), (255, 255, 255, 0))
@@ -553,7 +557,7 @@ class PillowCardGenerator(BaseCardGenerator):
             return card_bytes
 
         except Exception as e:
-            logger.error(f"Ошибка генерации PIL-карточки '{template_name}': {e}")
+            logger.error(f"Ошибка генерации PIL-карточки': {e}")
             raise
 
     def _draw_multiline_text(self, draw: ImageDraw.ImageDraw, text: str, position: Tuple[int, int],

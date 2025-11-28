@@ -16,7 +16,6 @@ import logging
 from aiogram import Bot, Dispatcher, Router
 
 from config import config
-from bot.handlers import router
 from infrastructure.image_generation import FusionBrainImageGenerator, AbstractImageGenerator
 from infrastructure.publication_notificator import AbstractNotificator, TelegramBotNotificator
 from service_bus import service_bus
@@ -40,6 +39,9 @@ from services.content_plan_service import ContentPlanService
 from services.notification_service import NotificationService
 
 from infrastructure.content_plan_scheduler import ContentPlanScheduler, start_scheduler, stop_scheduler
+
+from bot.main_router import router
+
 
 logger = logging.getLogger(__name__)
 
