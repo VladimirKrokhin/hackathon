@@ -19,6 +19,7 @@ from bot.handlers.image_generation import GENERATE_IMAGES_CALLBACK_DATA
 from bot.handlers.text_editing import EDIT_TEXT_CALLBACK_DATA
 from bot.handlers.wizard_handler import WIZARD_CREATE_CONTENT
 
+from bot.assets import ABOUT_PHOTO
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,6 @@ async def start_handler(message: Message, state: FSMContext):
         "Что вы хотите сделать?"
     )
 
-    from bot.handlers import ABOUT_PHOTO
 
     await message.answer_photo(
         photo=ABOUT_PHOTO,

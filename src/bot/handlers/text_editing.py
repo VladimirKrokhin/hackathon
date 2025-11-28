@@ -70,8 +70,6 @@ async def text_handler(message: Message, state: FSMContext):
 
 @text_editing_router.message(EditText.waiting_for_details, F.text)
 async def details_handler(message: Message, state: FSMContext):
-    from bot.handlers.start import BACK_TO_START_KEYBOARD
-    from bot.handlers import TEXT_GENERATION_PHOTO
 
     details = message.text.strip()
     if details == "⏭️ Пропустить уточнения":

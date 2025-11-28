@@ -22,6 +22,9 @@ from bot import bot
 
 from dtos import PromptContext
 
+from bot.assets import TEXT_SETUP_PHOTO, CALENDAR_PHOTO, LOCATION_PHOTO, INSPECT_PHOTO, NARRATIVE_STYLE_PHOTO, \
+    PLATFORM_PHOTO, TEXT_GENERATION_PHOTO, IMAGE_GENERATION_PHOTO, CARD_GENERATION_PHOTO
+
 BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
 
 
@@ -203,8 +206,6 @@ async def wizard_proceed_to_text_setup(callback: CallbackQuery, state: FSMContex
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_setup)
 
-    from bot.handlers import TEXT_SETUP_PHOTO
-
     await callback.message.answer_photo(
         photo=TEXT_SETUP_PHOTO,
         caption=text,
@@ -220,7 +221,6 @@ async def wizard_text_setup_handler(message: Message, state: FSMContext):
     data = await state.get_data()
     wizard_mode = data.get("wizard_mode", "structured")
 
-    from bot.handlers import CALENDAR_PHOTO
 
     if wizard_mode == "structured":
         # Структурированная форма: сохраняем тип события
@@ -248,7 +248,6 @@ async def wizard_event_date_handler(message: Message, state: FSMContext):
     event_date = message.text.strip()
     await state.update_data(event_date=event_date)
 
-    from bot.handlers import LOCATION_PHOTO
 
     await message.answer_photo(
         photo=LOCATION_PHOTO,
@@ -263,7 +262,6 @@ async def wizard_event_date_handler(message: Message, state: FSMContext):
 @create_content_wizard.message(ContentWizard.waiting_for_wizard_event_place, F.text)
 async def wizard_event_place_handler(message: Message, state: FSMContext):
     """Обработка места события."""
-    from bot.handlers import INSPECT_PHOTO
 
     event_place = message.text.strip()
     await state.update_data(event_place=event_place)
@@ -282,7 +280,6 @@ async def wizard_event_audience_handler(message: Message, state: FSMContext):
     """Обработка аудитории события."""
     event_audience = message.text.strip()
     await state.update_data(event_audience=event_audience)
-    from bot.handlers import TEXT_SETUP_PHOTO
 
     await message.answer_photo(
         photo=TEXT_SETUP_PHOTO,
@@ -308,8 +305,6 @@ async def wizard_event_details_handler(message: Message, state: FSMContext):
     """Обработка деталей события."""
     event_details = message.text.strip()
     await state.update_data(event_details=event_details)
-
-    from bot.handlers import NARRATIVE_STYLE_PHOTO
 
     await message.answer_photo(
         photo=NARRATIVE_STYLE_PHOTO,
@@ -352,7 +347,6 @@ async def wizard_narrative_motivational_handler(callback: CallbackQuery, state: 
 
 async def wizard_proceed_to_platform(callback: CallbackQuery, state: FSMContext):
     """Переход к выбору платформы."""
-    from bot.handlers import PLATFORM_PHOTO
 
     await callback.message.answer_photo(
         photo=PLATFORM_PHOTO,
@@ -400,7 +394,6 @@ WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD = InlineKeyboardMarkup(
 
 async def wizard_start_text_generation(message_or_callback, state: FSMContext):
     """Запуск генерации текста."""
-    from bot.handlers import TEXT_GENERATION_PHOTO
 
     await message_or_callback.answer_photo(
         photo=TEXT_GENERATION_PHOTO,
@@ -998,7 +991,6 @@ async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMConte
     """Обработчик генерации изображения."""
     await callback.answer()
 
-    from bot.handlers import IMAGE_GENERATION_PHOTO
 
     await callback.message.answer_photo(
         photo=IMAGE_GENERATION_PHOTO,
@@ -1216,7 +1208,6 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
     """Финальная генерация только карточек (текст уже готов)."""
     await callback.answer()
 
-    from bot.handlers import CARD_GENERATION_PHOTO
 
     await callback.message.answer_photo(
         photo=CARD_GENERATION_PHOTO,

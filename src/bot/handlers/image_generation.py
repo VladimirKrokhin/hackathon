@@ -16,6 +16,8 @@ from dtos import Dimensions
 
 from services.card_generation import CardGenerationService
 
+from bot.assets import TEXT_SETUP_PHOTO
+
 BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
 
 image_generation_router = Router(name="image_generation")
@@ -525,7 +527,7 @@ IMAGE_GENERATION_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="✍️ Описать изображение", callback_data=DESCRIBE_IMAGE_CALLBACK_DATA)],
         # FIXME: Из созданного контента не работает
-        [InlineKeyboardButton(text="🎭 Из созданного контента", callback_data="image_from_content")],
+        # [InlineKeyboardButton(text="🎭 Из созданного контента", callback_data="image_from_content")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)]
     ]
 )
@@ -572,8 +574,6 @@ async def describe_image_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик описания изображения."""
     await callback.answer()
     await state.clear()
-
-    from bot.handlers import TEXT_SETUP_PHOTO
 
     await state.set_state(ContentGeneration.waiting_for_image_description)
 

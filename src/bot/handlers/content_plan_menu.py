@@ -17,6 +17,7 @@ from bot.handlers.content_plan_generation import PUBLICATION_TIME_INTERVAL_KEYBO
 
 from dtos import PromptContext
 
+from bot.assets import CALENDAR_PHOTO
 
 logger = logging.getLogger(__name__)
 content_plan_menu_router = Router(name="content_plan_menu")
@@ -79,7 +80,6 @@ async def content_plan_menu_handler(callback: CallbackQuery, state: FSMContext):
 @content_plan_menu_router.callback_query(F.data == CREATE_NEW_CONTENT_PLAN_CALLBACK_DATA)
 async def create_content_plan_handler(callback: CallbackQuery, state: FSMContext):
     """Начать создание нового контент-плана."""
-    from bot.handlers import CALENDAR_PHOTO
     await callback.answer()
 
     await callback.message.answer(

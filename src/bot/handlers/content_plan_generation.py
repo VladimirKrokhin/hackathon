@@ -15,6 +15,7 @@ from dtos import PlanPromptContext
 
 from models import ContentPlan, PublicationStatus
 
+from bot.assets import TEXT_SETUP_PHOTO
 
 THREE_DAYS_PUBLICATION_TIME_PERIOD = "period_3days"
 WEEK_PUBLICATION_TIME_PERIOD = "period_week"
@@ -126,8 +127,6 @@ async def generate_and_save_plan(message: Message, state: FSMContext, data: dict
     """
     Общая функция для генерации и сохранения контент-плана
     """
-
-    from bot.handlers import TEXT_SETUP_PHOTO
 
     content_plan_service: ContentPlanService = dispatcher["content_plan_service"]
 
