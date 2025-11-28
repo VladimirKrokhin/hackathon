@@ -20,6 +20,8 @@ ngo_info_router = Router(name="ngo_info")
 logger = logging.getLogger(__name__)
 
 
+NGO_DONE_CALLBACK = "ngo_done"
+
 UPDATE_NGO_CONTENT_CALLBACK_DATA = "update_ngo"
 VIEW_NGO_INFO_CALLBACK_DATA = "ngo_info"
 
@@ -36,6 +38,13 @@ NGO_INFO_MENU_KEYBOARD = InlineKeyboardMarkup(
 NGO_BACK_KEYBOARD = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)],
+    ]
+)
+
+NGO_BACK_CONF_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)],
+        [InlineKeyboardButton(text="✅ Готово", callback_data=NGO_DONE_CALLBACK)],
     ]
 )
 
@@ -161,8 +170,7 @@ async def ngo_contact_handler(message: Message, state: FSMContext):
 
     await message.answer(
         summary,
-        # FIXME: оставь клавиатуру "Подтверить" или что-то другое...
-        reply_markup=NGO_BACK_KEYBOARD,
+        reply_markup=NGO_BACK_CONF_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
@@ -252,7 +260,6 @@ async def view_ngo_handler(callback: CallbackQuery, state: FSMContext):
         return
 
 
-NGO_DONE_CALLBACK = "ngo_done"
 NGO_CANCEL_CALLBACK = "ngo_cancel"
 NGO_SKIP_CALLBACK = "ngo_skip"
 
@@ -386,6 +393,16 @@ async def ngo_skip_handler(callback: CallbackQuery, state: FSMContext):
         activities = data.get("ngo_activities", "Не указано")
         contact_info = "Не указано"
 
+        ngo_info = Ngo(
+            id_=None,
+            user_id=callback.from_user.id,
+            name=name,
+            description=description,
+            activities=activities,
+            contacts=contact_info
+        )
+        await state.update_data(ngo_info=ngo_info)
+
         summary = (
             f"🏢 **Информация о НКО \"{name}\"**\n\n"
             f"📝 **Описание:** {description}\n\n"
@@ -396,7 +413,7 @@ async def ngo_skip_handler(callback: CallbackQuery, state: FSMContext):
 
         await callback.message.answer(
             summary,
-            reply_markup=NGO_NAVIGATION_KEYBOARD,
+            reply_markup=NGO_BACK_CONF_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(NGOInfo.waiting_for_ngo_confirmation)

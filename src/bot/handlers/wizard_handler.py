@@ -1185,7 +1185,7 @@ WIZARD_CARD_READY_KEYBOARD = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="🔄 Перегенерировать карточки", callback_data="wizard_regenerate_card")],
         [InlineKeyboardButton(text="✏️ Изменить текст карточки", callback_data="wizard_edit_card_text")],
         [InlineKeyboardButton(text="📝 Написать промпт для карточки", callback_data="wizard_write_card_prompt")],
-        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="wizard_back_to_main")]
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)]
     ]
 )
 
@@ -1287,23 +1287,19 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
             template=CardTemplate.TELEGRAM
         )
 
-
-
-
         title = await card_generation_service.generate_card_title(generated_text)
 
         # Устанавливаем значения по умолчанию
         ngo_name = ngo_data.name
         ngo_contact = ngo_data.contacts
-        platform = data["platform"]
-
-
-        event_data = EventData(
-            timestamp=data['event_date'],
-            location=data["event_place"],
-            audience=data["event_audience"],
-        )
-
+        # platform = data["platform"]
+        event_data = None
+        if wizard_mode == "structured":
+            event_data = EventData(
+                timestamp=data['event_date'],
+                location=data["event_place"],
+                audience=data["event_audience"],
+            )
 
         card_data = CardData(
             image=generated_image,
@@ -1316,7 +1312,6 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
             parameters,
             card_data
         )
-
 
         await callback.message.answer(
             "🎨 Вот ваша карточка для соцсетей:",
