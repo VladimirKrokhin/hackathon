@@ -847,7 +847,8 @@ WIZARD_FINAL_CONFIRM_KEYBOARD = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="🎨 Создать контент", callback_data="wizard_create_content")],
         [InlineKeyboardButton(text="🔄 Изменить настройки", callback_data="wizard_modify_settings")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="wizard_back_to_image")],
-        [InlineKeyboardButton(text="🏠 В главное меню", callback_data="wizard_back_to_main")]
+        # FIXME: не работает
+        # [InlineKeyboardButton(text="🏠 В главное меню", callback_data="wizard_back_to_main")]
     ]
 )
 
