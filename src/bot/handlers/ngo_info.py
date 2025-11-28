@@ -41,6 +41,13 @@ NGO_BACK_KEYBOARD = InlineKeyboardMarkup(
     ]
 )
 
+NGO_BACK_CONF_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)],
+        [InlineKeyboardButton(text="✅ Готово", callback_data=NGO_DONE_CALLBACK)],
+    ]
+)
+
 FILL_NGO_INFO_CALLBACK_DATA = "fill_ngo"
 
 NGO_INFO_MENU_KEYBOARD_NO_NGO = InlineKeyboardMarkup(
@@ -161,14 +168,9 @@ async def ngo_contact_handler(message: Message, state: FSMContext):
         "Подтверждаете данные? Их можно будет изменить позже."
     )
 
-    keyboard = NGO_BACK_KEYBOARD.inline_keyboard.append(
-        [InlineKeyboardButton(text="✅ Готово", callback_data=NGO_DONE_CALLBACK)]
-    )
-
     await message.answer(
         summary,
-        # FIXME: оставь клавиатуру "Подтверить" или что-то другое...
-        reply_markup=keyboard,
+        reply_markup=NGO_BACK_CONF_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
@@ -411,7 +413,7 @@ async def ngo_skip_handler(callback: CallbackQuery, state: FSMContext):
 
         await callback.message.answer(
             summary,
-            reply_markup=NGO_NAVIGATION_KEYBOARD,
+            reply_markup=NGO_BACK_CONF_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(NGOInfo.waiting_for_ngo_confirmation)
