@@ -6,25 +6,84 @@
 
 - Генерация текстового контента с использованием YandexGPT
 - Генерация изображений через FusionBrain API
-- Генерация контент-карточек (PIL + Playwright)
+- Генерация контент-карточек (PIL)
 - Создание и управление контент-планами с автоматическими напоминаниями
 - Редактирование текста через AI
 
 Архитектура основана на принципах Clean Architecture с разделением на слои и dependency injection.
 
-## Структура проекта
+## Полная файловая структура проекта
+
+### Корневые файлы и конфигурация
+
+```
+hackathon/
+├── ⚙️ Конфигурация проекта
+│   ├── pyproject.toml                # Python зависимости (uv)
+│   ├── uv.lock                       # Замороженные версии пакетов
+│   ├── .env.example                  # Шаблон переменных окружения
+│   ├── .python-version               # Версия Python
+│   ├── .gitignore                    # Git игнорируемые файлы
+│
+├── 🐳 Docker поддержка
+│   ├── Dockerfile                    # Конфигурация Docker образа
+│   ├── docker-compose.yml            # Compose для локальной разработки
+│   ├── .dockerignore                 # Исключения для Docker build
+│   └── GITHUB_RUNNER_DEPLOYMENT.md   # Деплой на GitHub Runner
+│
+└── 📁 Исходный код (src/)
+```
+
+### Структура исходного кода (src/)
 
 ```
 src/
-├── main.py              # Точка входа приложения
-├── bootstrap.py         # Инициализация сервисов и зависимостей
-├── config.py            # Конфигурация приложения
-├── service_bus.py       # Управление жизненным циклом сервисов
-├── models.py            # Доменные модели данных
-├── dtos.py              # Data Transfer Objects
-├── bot/                 # Слой обработки Telegram API
-├── services/            # Бизнес-логика сервисов
-└── infrastructure/      # Инфраструктурные компоненты
+├── 🎯 main.py                        # Точка входа приложения
+├── ⚙️ config.py                      # Конфигурация
+├── 🚀 bootstrap.py                   # Инициализация зависимостей
+├── 🚌 service_bus.py                 # Управление жизненным циклом
+├── 🗂️ models.py                      # Доменные модели данных
+├── 📋 dtos.py                        # Data Transfer Objects
+│
+├── 📱 bot/                           # Пользовательский интерфейс
+│   ├── __init__.py
+│   ├── main_router.py               # Главный роутер aiogram
+│   ├── states.py                    # FSM состояния диалогов
+│   ├── handlers/                    # Обработчики команд
+│   └── assets/                     # Статические ресурсы
+│
+├── 💼 services/                     # Бизнес-логика
+│   ├── __init__.py
+│   ├── ngo_service.py               # NGOService - работа с НКО
+│   ├── text_generation.py           # TextGenerationService - создание текста поста
+│   ├── card_generation.py           # CardGenerationService - создание карточек
+│   ├── image_generation.py          # ImageGenerationService - создание картинок
+│   ├── content_plan_service.py      # ContentPlanService - работа с контент планом
+│   └── notification_service.py      # NotificationService - уведомления
+│
+└── 🔧 infrastructure/               # Внешние интеграции
+    ├── __init__.py
+    ├── prompt_builder.py            # Построение промптов
+    ├── response_processor.py        # Обработка ответов AI
+    ├── gpt.py                       # YandexGPT клиент
+    ├── image_generation.py          # FusionBrain клиент
+    ├── card_generation.py           # Генерация карточек (PIL)
+    ├── publication_notificator.py   # Telegram уведомления
+    ├── content_plan_scheduler.py    # Планировщик
+    │
+    └── repositories/                # Доступ к данным
+        ├── __init__.py
+        ├── ngo_repository.py         # AbstractNGORepository
+        ├── content_plan_repository.py # AbstractContentPlanRepository
+        │
+        └── sqlalchemy/               # Реализации на SQLAlchemy
+            ├── __init__.py
+            ├── database.py          # Настройка БД
+            └── models/               # ORM модели
+                ├── __init__.py
+                ├── ngo.py
+                ├── content_plan.py
+                └── content_plan_item.py
 ```
 
 ## Основные слои
