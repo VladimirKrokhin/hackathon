@@ -2,36 +2,65 @@ import logging
 
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
+from aiogram.types import BufferedInputFile, CallbackQuery, Message, ReplyKeyboardRemove, FSInputFile
 from aiogram.enums.parse_mode import ParseMode
+from aiogram.types.inline_keyboard_button import InlineKeyboardButton
+from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 
-from bot.states import ContentWizard
-from bot.keyboards.inline import (
-    get_wizard_mode_keyboard,
-    get_yes_no_keyboard,
-    get_wizard_text_management_keyboard,
-    get_wizard_field_select_keyboard,
-    get_wizard_image_source_keyboard,
-    get_wizard_image_prompt_preview_keyboard,
-    get_wizard_image_management_keyboard,
-    get_wizard_final_confirm_keyboard,
-    get_wizard_text_regenerate_keyboard,
-    get_wizard_card_ready_keyboard,
-    get_narrative_style_keyboard,
-    get_platform_keyboard,
+
+from models import Ngo
+from dtos import PromptContext, Dimensions
+
+from bot import dispatcher,bot
+from bot.states import ContentWizard, ContentGeneration
+from bot.assets import TEXT_SETUP_PHOTO, CALENDAR_PHOTO, LOCATION_PHOTO, INSPECT_PHOTO, NARRATIVE_STYLE_PHOTO, \
+    PLATFORM_PHOTO, TEXT_GENERATION_PHOTO, IMAGE_GENERATION_PHOTO, CARD_GENERATION_PHOTO
+
+from services.ngo_service import NGOService
+from services.card_generation import CardGenerationService
+from services.text_generation import TextGenerationService
+
+from dtos import RenderParameters, CardTemplate, CardData, EventData
+
+BACK_TO_MAIN_MENU_CALLBACK_DATA = "back_to_main"
+
+
+YES_NO_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да", callback_data="yes"),
+         InlineKeyboardButton(text="❌ Нет", callback_data="no")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_MAIN_MENU_CALLBACK_DATA)]
+    ]
 )
-from app import dp
+
+
+BACK_TO_START_MENU_CALLBACK_DATA = "back_to_start_menu"
 
 logger = logging.getLogger(__name__)
 
-wizard_router = Router(name="wizard")
+create_content_wizard = Router(name="wizard")
+
+
+WIZARD_CREATE_CONTENT = "create_content_wizard"
+
 
 
 # ===== ЭТАП 1: ЗАПУСК WIZARD =====
 
-@wizard_router.callback_query(F.data == "create_content")
+"""Клавиатура выбора режима генерации контента для Wizard."""
+CONTENT_WIZARD_SELECT_MODE_KEYBOARD: InlineKeyboardMarkup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Структурированная форма", callback_data="create_content_wizard_structured")],
+            [InlineKeyboardButton(text="💭 Свободная форма", callback_data="wizard_free")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=BACK_TO_START_MENU_CALLBACK_DATA)]
+        ]
+    )
+
+
+
+@create_content_wizard.callback_query(F.data == WIZARD_CREATE_CONTENT)
 async def start_wizard_handler(callback: CallbackQuery, state: FSMContext):
-    """Запуск Wizard паттерна для создания контента."""
+    """Запуск Мастера для создания контента."""
     await callback.answer()
     await state.clear()
     await state.set_state(ContentWizard.waiting_for_wizard_mode)
@@ -45,34 +74,36 @@ async def start_wizard_handler(callback: CallbackQuery, state: FSMContext):
         "3️⃣ Настройка изображений\n"
         "4️⃣ Финальная генерация контента\n\n"
         "**Выберите форму создания:**",
-        reply_markup=get_wizard_mode_keyboard(),
+        reply_markup=CONTENT_WIZARD_SELECT_MODE_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
 
 
 # ===== ЭТАП 1: ВЫБОР РЕЖИМА =====
 
-@wizard_router.callback_query(F.data == "wizard_structured")
+# FIXME: Этот обработчик реально используется
+@create_content_wizard.callback_query(F.data == "create_content_wizard_structured")
 async def wizard_structured_mode_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора структурированной формы."""
+    from bot.handlers.start import BACK_TO_START_KEYBOARD
     await callback.answer()
     await state.update_data(wizard_mode="structured")
 
     # Проверяем наличие данных НКО
-    ngo_service = dp["ngo_service"]
-    user_id = callback.from_user.id
+    ngo_service: NGOService = dispatcher["ngo_service"]
+    user_id: int = callback.from_user.id
 
-    has_ngo_data = ngo_service.ngo_exists(user_id)
+    has_ngo_data: bool = ngo_service.ngo_exists(user_id)
 
     if has_ngo_data:
-        ngo_data = ngo_service.get_ngo_data(user_id)
-        ngo_name = ngo_data.get("ngo_name", "")
+        ngo_data: Ngo = ngo_service.get_ngo_data_by_user_id(user_id)
+        ngo_name: str = ngo_data.name
 
         await callback.message.answer(
             f"📋 **Структурированная форма**\n\n"
             f"У вас есть данные НКО: **{ngo_name}**\n\n"
             f"Использовать данные НКО в контенте?",
-            reply_markup=get_yes_no_keyboard(),
+            reply_markup=YES_NO_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
     else:
@@ -81,34 +112,34 @@ async def wizard_structured_mode_handler(callback: CallbackQuery, state: FSMCont
             "У вас нет сохраненных данных об НКО.\n\n"
             "Хотите заполнить их перед созданием контента?\n\n"
             "_Это поможет сделать контент персонализированным._",
-            reply_markup=get_yes_no_keyboard(),
+            reply_markup=YES_NO_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
 
     await state.set_state(ContentWizard.waiting_for_wizard_ngo)
 
 
-@wizard_router.callback_query(F.data == "wizard_free")
+@create_content_wizard.callback_query(F.data == "wizard_free")
 async def wizard_free_mode_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора свободной формы."""
     await callback.answer()
     await state.update_data(wizard_mode="free")
 
     # Проверяем наличие данных НКО
-    ngo_service = dp["ngo_service"]
+    ngo_service: NGOService = dispatcher["ngo_service"]
     user_id = callback.from_user.id
 
     has_ngo_data = ngo_service.ngo_exists(user_id)
 
     if has_ngo_data:
-        ngo_data = ngo_service.get_ngo_data(user_id)
-        ngo_name = ngo_data.get("ngo_name", "")
+        ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
+        ngo_name = ngo_data.name
 
         await callback.message.answer(
             f"💭 **Свободная форма**\n\n"
             f"У вас есть данные НКО: **{ngo_name}**\n\n"
             f"Использовать данные НКО в контенте?",
-            reply_markup=get_yes_no_keyboard(),
+            reply_markup=YES_NO_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
     else:
@@ -117,51 +148,30 @@ async def wizard_free_mode_handler(callback: CallbackQuery, state: FSMContext):
             "Вы сможете самостоятельно описать содержание поста.\n\n"
             "Хотите сначала заполнить данные о вашей НКО?\n\n"
             "_Это пригодится для будущих генераций контента._",
-            reply_markup=get_yes_no_keyboard(),
+            reply_markup=YES_NO_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
 
     await state.set_state(ContentWizard.waiting_for_wizard_ngo)
 
 
-@wizard_router.callback_query(F.data == "wizard_back_to_main")
-async def wizard_back_to_main_handler(callback: CallbackQuery, state: FSMContext):
-    """Возврат в главное меню."""
-    await callback.answer()
-    await state.clear()
-
-    from bot.keyboards.inline import get_main_menu_keyboard
-    await callback.message.answer(
-        "🏠 Возвращаемся в главное меню",
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode=ParseMode.MARKDOWN,
-    )
-
 
 # ===== ЭТАП 1: ОБРАБОТКА ВЫБОРА НКО =====
 
-@wizard_router.callback_query(F.data == "yes", ContentWizard.waiting_for_wizard_ngo)
+@create_content_wizard.callback_query(F.data == "yes", ContentWizard.waiting_for_wizard_ngo)
 async def wizard_yes_ngo_handler(callback: CallbackQuery, state: FSMContext):
     """Пользователь согласился использовать данные НКО."""
     await callback.answer()
 
-    ngo_service = dp["ngo_service"]
+    ngo_service = dispatcher["ngo_service"]
     user_id = callback.from_user.id
-    ngo_data = ngo_service.get_ngo_data(user_id)
 
-    if ngo_data:
-        await state.update_data(**{"has_ngo_info": True, **ngo_data})
-        await wizard_proceed_to_text_setup(callback, state)
-    else:
-        # Данных НКО нет, предлагаем заполнить
-        await callback.message.answer(
-            "🏢 **Заполним данные НКО**\n\n"
-            "Укажите название вашей организации:",
-        )
-        await state.set_state(ContentWizard.waiting_for_wizard_ngo_fill)
+    ngo_data: Ngo = ngo_service.get_ngo_data_by_user_id(user_id)
+    await state.update_data({"ngo_data": ngo_data})
+    await wizard_proceed_to_text_setup(callback, state)
 
 
-@wizard_router.callback_query(F.data == "no", ContentWizard.waiting_for_wizard_ngo)
+@create_content_wizard.callback_query(F.data == "no", ContentWizard.waiting_for_wizard_ngo)
 async def wizard_no_ngo_handler(callback: CallbackQuery, state: FSMContext):
     """Пользователь отказался использовать данные НКО."""
     await callback.answer()
@@ -174,43 +184,50 @@ async def wizard_proceed_to_text_setup(callback: CallbackQuery, state: FSMContex
     data = await state.get_data()
     wizard_mode = data.get("wizard_mode", "structured")
 
+    text = "📝 **Этап 2: Настройка текста**\n\n"
+
+
     if wizard_mode == "structured":
-        await callback.message.answer(
-            "📝 **Этап 2: Настройка текста**\n\n"
+        text += (
             "Давайте настроим параметры структурированного поста.\n\n"
             "**Что за событие?**\n"
-            "Опишите коротко, о каком событии будет пост.",
-            reply_markup=ReplyKeyboardRemove(),
-            parse_mode=ParseMode.MARKDOWN,
+            "Опишите коротко, о каком событии будет пост."
         )
+
         await state.set_state(ContentWizard.waiting_for_wizard_text_setup)
     else:  # free form
-        await callback.message.answer(
-            "💭 **Этап 2: Настройка текста**\n\n"
+        text += (
             "Опишите ваш пост свободно.\n\n"
             "**Расскажите подробно**\n"
-            "Какая информация должна быть в посте, какую цель он преследует.",
-            reply_markup=ReplyKeyboardRemove(),
-            parse_mode=ParseMode.MARKDOWN,
+            "Какая информация должна быть в посте, какую цель он преследует."
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_setup)
 
+    await callback.message.answer_photo(
+        photo=TEXT_SETUP_PHOTO,
+        caption=text,
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
 # ===== ЭТАП 2: НАСТРОЙКА ТЕКСТА =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_text_setup, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_text_setup, F.text)
 async def wizard_text_setup_handler(message: Message, state: FSMContext):
     """Обработка ввода параметров текста."""
     data = await state.get_data()
     wizard_mode = data.get("wizard_mode", "structured")
+
 
     if wizard_mode == "structured":
         # Структурированная форма: сохраняем тип события
         event_type = message.text.strip()
         await state.update_data(event_type=event_type)
 
-        await message.answer(
-            "📅 **Когда состоится событие?**\n"
+
+        await message.answer_photo(
+            photo=CALENDAR_PHOTO,
+            caption="📅 **Когда состоится событие?**\n"
             "Укажите дату и время проведения.",
             reply_markup=ReplyKeyboardRemove(),
             parse_mode=ParseMode.MARKDOWN,
@@ -222,157 +239,196 @@ async def wizard_text_setup_handler(message: Message, state: FSMContext):
         await wizard_start_text_generation(message, state)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_date, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_date, F.text)
 async def wizard_event_date_handler(message: Message, state: FSMContext):
     """Обработка даты события."""
     event_date = message.text.strip()
     await state.update_data(event_date=event_date)
 
-    await message.answer(
-        "📍 **Где состоится событие?**\n"
+
+    await message.answer_photo(
+        photo=LOCATION_PHOTO,
+        caption="📍 **Где состоится событие?**\n"
         "Укажите место проведения.",
         parse_mode=ParseMode.MARKDOWN,
     )
+
     await state.set_state(ContentWizard.waiting_for_wizard_event_place)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_place, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_place, F.text)
 async def wizard_event_place_handler(message: Message, state: FSMContext):
     """Обработка места события."""
+
     event_place = message.text.strip()
     await state.update_data(event_place=event_place)
 
-    await message.answer(
-        "👥 **Кто приглашен на событие?**\n"
+    await message.answer_photo(
+        photo=INSPECT_PHOTO,
+        caption="👥 **Кто приглашен на событие?**\n"
         "Укажите целевую аудиторию (волонтеры, дети, родители, пенсионеры).",
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_event_audience)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_audience, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_audience, F.text)
 async def wizard_event_audience_handler(message: Message, state: FSMContext):
     """Обработка аудитории события."""
     event_audience = message.text.strip()
     await state.update_data(event_audience=event_audience)
 
-    await message.answer(
-        "📝 **Дополнительные детали**\n"
+    await message.answer_photo(
+        photo=TEXT_SETUP_PHOTO,
+        caption="📝 **Дополнительные детали**\n"
         "Расскажите подробнее о событии: что будет интересного, зачем участвовать.",
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_event_details)
 
+NARRATIVE_STYLE_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="💬 Разговорный стиль", callback_data="narrative_conversational")],
+        [InlineKeyboardButton(text="📋 Официально-деловой стиль", callback_data="narrative_official")],
+        [InlineKeyboardButton(text="🎨 Художественный стиль", callback_data="narrative_artistic")],
+        [InlineKeyboardButton(text="🌟 Позитивный/мотивирующий стиль", callback_data="narrative_motivational")],
+        # TODO: Добавь указание своего стиля
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_previous")]
+    ]
+)
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_details, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_details, F.text)
 async def wizard_event_details_handler(message: Message, state: FSMContext):
     """Обработка деталей события."""
     event_details = message.text.strip()
     await state.update_data(event_details=event_details)
 
-    await message.answer(
-        "🎨 **Выберите стиль повествования:**",
-        reply_markup=get_narrative_style_keyboard(),
+    await message.answer_photo(
+        photo=NARRATIVE_STYLE_PHOTO,
+        caption="🎨 **Выберите стиль повествования:**",
+        reply_markup=NARRATIVE_STYLE_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_event_style)
 
 
-@wizard_router.callback_query(F.data == "narrative_conversational", ContentWizard.waiting_for_wizard_event_style)
+@create_content_wizard.callback_query(F.data == "narrative_conversational", ContentWizard.waiting_for_wizard_event_style)
 async def wizard_narrative_conversational_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(narrative_style="💬 Разговорный стиль")
     await wizard_proceed_to_platform(callback, state)
 
 
-@wizard_router.callback_query(F.data == "narrative_official", ContentWizard.waiting_for_wizard_event_style)
+@create_content_wizard.callback_query(F.data == "narrative_official", ContentWizard.waiting_for_wizard_event_style)
 async def wizard_narrative_official_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(narrative_style="📋 Официально-деловой стиль")
     await wizard_proceed_to_platform(callback, state)
 
 
-@wizard_router.callback_query(F.data == "narrative_artistic", ContentWizard.waiting_for_wizard_event_style)
+@create_content_wizard.callback_query(F.data == "narrative_artistic", ContentWizard.waiting_for_wizard_event_style)
 async def wizard_narrative_artistic_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(narrative_style="🎨 Художественный стиль")
     await wizard_proceed_to_platform(callback, state)
 
-
-@wizard_router.callback_query(F.data == "narrative_motivational", ContentWizard.waiting_for_wizard_event_style)
+@create_content_wizard.callback_query(F.data == "narrative_motivational", ContentWizard.waiting_for_wizard_narrative_style_edit)
+@create_content_wizard.callback_query(F.data == "narrative_motivational", ContentWizard.waiting_for_wizard_event_style)
 async def wizard_narrative_motivational_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(narrative_style="🌟 Позитивный/мотивирующий стиль")
     await wizard_proceed_to_platform(callback, state)
 
 
+
+
 async def wizard_proceed_to_platform(callback: CallbackQuery, state: FSMContext):
     """Переход к выбору платформы."""
-    await callback.message.answer(
-        "📱 **На какой платформе будет опубликован пост?**",
-        reply_markup=get_platform_keyboard(),
+
+    await callback.message.answer_photo(
+        photo=PLATFORM_PHOTO,
+        caption="📱 **На какой платформе будет опубликован пост?**",
+        reply_markup=PLATFORM_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_event_platform)
 
 
-@wizard_router.callback_query(F.data == "platform_vk", ContentWizard.waiting_for_wizard_event_platform)
+@create_content_wizard.callback_query(F.data == "platform_vk", ContentWizard.waiting_for_wizard_platform_edit)
+@create_content_wizard.callback_query(F.data == "platform_vk", ContentWizard.waiting_for_wizard_event_platform)
 async def wizard_platform_vk_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(platform="📱 ВКонтакте (для молодежи)")
     await wizard_start_text_generation(callback.message, state)
 
 
-@wizard_router.callback_query(F.data == "platform_telegram", ContentWizard.waiting_for_wizard_event_platform)
+@create_content_wizard.callback_query(F.data == "platform_telegram", ContentWizard.waiting_for_wizard_platform_edit)
+@create_content_wizard.callback_query(F.data == "platform_telegram", ContentWizard.waiting_for_wizard_event_platform)
 async def wizard_platform_telegram_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(platform="💬 Telegram (для взрослых/бизнеса)")
     await wizard_start_text_generation(callback.message, state)
 
 
-@wizard_router.callback_query(F.data == "platform_website", ContentWizard.waiting_for_wizard_event_platform)
+@create_content_wizard.callback_query(F.data == "platform_website", ContentWizard.waiting_for_wizard_platform_edit)
+@create_content_wizard.callback_query(F.data == "platform_website", ContentWizard.waiting_for_wizard_event_platform)
 async def wizard_platform_website_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(platform="🌐 Сайт (для информационных материалов)")
     await wizard_start_text_generation(callback.message, state)
 
 
+WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перегенерировать", callback_data="wizard_text_regenerate")],
+        [InlineKeyboardButton(text="✏️ Исправить текст", callback_data="wizard_text_edit")],
+        [InlineKeyboardButton(text="⚙️ Изменить параметры", callback_data="wizard_text_change_fields")],
+        [InlineKeyboardButton(text="🎨 Генерация карточки", callback_data="wizard_to_image")],
+        [InlineKeyboardButton(text="⬅️ Назад к настройкам", callback_data="wizard_back_to_setup")]
+    ]
+)
+
+
 async def wizard_start_text_generation(message_or_callback, state: FSMContext):
     """Запуск генерации текста."""
-    await message_or_callback.answer(
-        "🧠 **Генерируем текст поста...**",
+
+    await message_or_callback.answer_photo(
+        photo=TEXT_GENERATION_PHOTO,
+        caption="🧠 **Генерируем текст поста...**",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=ParseMode.MARKDOWN,
     )
 
     try:
         # Генерация текста
-        text_generation_service = dp["text_content_generation_service"]
+        text_generation_service = dispatcher["text_content_generation_service"]
         data = await state.get_data()
+        user_text = ""
+        if data["wizard_mode"] == "structured":
+            context = PromptContext(
+                event_type=data.get("event_type", ""),
+                event_date=data.get("event_date", ""),
+                event_place=data.get("event_place", ""),
+                event_audience=data.get("event_audience", ""),
+                narrative_style=data.get("narrative_style", ""),
+                platform=data.get("platform", ""),
+                has_ngo_info=data.get("has_ngo_info", ""),
+                ngo_name=data.get("ngo_name", ""),
+                ngo_description=data.get("ngo_description", ""),
+                ngo_activities=data.get("ngo_activities", ""),
+                ngo_contact=data.get("ngo_contact", ""),
+            )
+        else:
+            user_text = data["user_description"]
+            context = PromptContext(
+                has_ngo_info=data.get("has_ngo_info", ""),
+                ngo_name=data.get("ngo_name", ""),
+                ngo_description=data.get("ngo_description", ""),
+                ngo_activities=data.get("ngo_activities", ""),
+                ngo_contact=data.get("ngo_contact", ""),
+            )
 
-        # Подготавливаем данные для генерации
-        generation_data = {
-            "user_text": data.get("user_description", ""),
-            "has_ngo_info": data.get("has_ngo_info", False),
-        }
-
-        # Добавляем данные структурированной формы
-        structured_fields = [
-            "event_type", "event_date", "event_place", "event_audience",
-            "event_details", "narrative_style", "platform"
-        ]
-        for field in structured_fields:
-            if field in data:
-                generation_data[field] = data[field]
-
-        # Добавляем данные НКО если есть
-        if data.get("has_ngo_info", False):
-            ngo_fields = ["ngo_name", "ngo_description", "ngo_activities", "ngo_contact"]
-            for field in ngo_fields:
-                if field in data:
-                    generation_data[field] = data[field]
-
-        generated_text = await text_generation_service.generate_text_content(generation_data, generation_data.get("user_text", ""))
+        generated_text = await text_generation_service.generate_text(context, user_text)
 
         await state.update_data(generated_text=generated_text)
 
@@ -386,7 +442,7 @@ async def wizard_start_text_generation(message_or_callback, state: FSMContext):
         )
         await message_or_callback.answer(
             "**Что делать с текстом?**",
-            reply_markup=get_wizard_text_management_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_result)
@@ -395,13 +451,21 @@ async def wizard_start_text_generation(message_or_callback, state: FSMContext):
         logger.exception(f"Ошибка генерации текста: {e}")
         await message_or_callback.answer(
             "❌ Произошла ошибка при генерации текста. Попробуйте снова.",
-            reply_markup=get_wizard_mode_keyboard(),
+            reply_markup=CONTENT_WIZARD_SELECT_MODE_KEYBOARD,
         )
 
 
 # ===== ЭТАП 2: УПРАВЛЕНИЕ ТЕКСТОМ =====
+WIZARD_TEXT_REGENERATE = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🎲 Случайные изменения", callback_data="wizard_regenerate_random")],
+        [InlineKeyboardButton(text="✏️ Указать причину", callback_data="wizard_regenerate_custom")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="wizard_back_to_text_result")]
+    ]
+)
 
-@wizard_router.callback_query(F.data == "wizard_text_regenerate")
+
+@create_content_wizard.callback_query(F.data == "wizard_text_regenerate")
 async def wizard_text_regenerate_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик перегенерации текста."""
     await callback.answer()
@@ -409,11 +473,11 @@ async def wizard_text_regenerate_handler(callback: CallbackQuery, state: FSMCont
     await callback.message.answer(
         "🔄 **Перегенерация текста**\n\n"
         "Выберите вариант генерации:",
-        reply_markup=get_wizard_text_regenerate_keyboard(),
+        reply_markup=WIZARD_TEXT_REGENERATE,
     )
 
 
-@wizard_router.callback_query(F.data == "wizard_text_edit")
+@create_content_wizard.callback_query(F.data == "wizard_text_edit")
 async def wizard_text_edit_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик редактирования текста."""
     await callback.answer()
@@ -428,7 +492,22 @@ async def wizard_text_edit_handler(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ContentWizard.waiting_for_wizard_text_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_text_change_fields")
+WIZARD_CONTENT_GENERATION_FIELD_SELECT_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="📝 Тип события", callback_data="wizard_edit_event_type")],
+        [InlineKeyboardButton(text="📅 Дата события", callback_data="wizard_edit_event_date")],
+        [InlineKeyboardButton(text="📍 Место события", callback_data="wizard_edit_event_place")],
+        [InlineKeyboardButton(text="👥 Аудитория", callback_data="wizard_edit_event_audience")],
+        [InlineKeyboardButton(text="📝 Детали события", callback_data="wizard_edit_event_details")],
+        [InlineKeyboardButton(text="🎨 Стиль повествования", callback_data="wizard_edit_narrative_style")],
+        [InlineKeyboardButton(text="📱 Платформа", callback_data="wizard_edit_platform")],
+        [InlineKeyboardButton(text="✅ Сохранить и вернуться", callback_data="wizard_back_to_text_result")],
+        [InlineKeyboardButton(text="⬅️ Назад к тексту", callback_data="wizard_back_to_text_result")]
+    ]
+)
+
+
+@create_content_wizard.callback_query(F.data == "wizard_text_change_fields")
 async def wizard_text_change_fields_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик изменения параметров структурированной формы."""
     await callback.answer()
@@ -440,7 +519,7 @@ async def wizard_text_change_fields_handler(callback: CallbackQuery, state: FSMC
         await callback.message.answer(
             "⚙️ **Изменение параметров**\n\n"
             "Выберите, какое поле хотите изменить:",
-            reply_markup=get_wizard_field_select_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_FIELD_SELECT_KEYBOARD,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_field_select)
     else:
@@ -453,7 +532,17 @@ async def wizard_text_change_fields_handler(callback: CallbackQuery, state: FSMC
         await state.set_state(ContentWizard.waiting_for_wizard_text_field_select)
 
 
-@wizard_router.callback_query(F.data == "wizard_to_image")
+WIZARD_IMAGE_SOURCE_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🤖 Сгенерировать ИИ", callback_data="wizard_image_ai")],
+        [InlineKeyboardButton(text="📎 Загрузить своё", callback_data="wizard_image_upload")],
+        [InlineKeyboardButton(text="🚫 Без фото", callback_data="wizard_image_none")],
+        [InlineKeyboardButton(text="⬅️ Назад к тексту", callback_data="wizard_back_to_text")]
+    ]
+)
+
+
+@create_content_wizard.callback_query(F.data == "wizard_to_image")
 async def wizard_to_image_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик перехода к этапу работы с изображением."""
     await callback.answer()
@@ -461,7 +550,7 @@ async def wizard_to_image_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "🖼️ **Этап 3: Работа с изображением**\n\n"
         "Выберите источник изображения для поста:",
-        reply_markup=get_wizard_image_source_keyboard(),
+        reply_markup=WIZARD_IMAGE_SOURCE_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_image_source)
@@ -469,7 +558,7 @@ async def wizard_to_image_handler(callback: CallbackQuery, state: FSMContext):
 
 # ===== ОБРАБОТЧИКИ ПЕРЕГЕНЕРАЦИИ ТЕКСТА =====
 
-@wizard_router.callback_query(F.data == "wizard_regenerate_random")
+@create_content_wizard.callback_query(F.data == "wizard_regenerate_random")
 async def wizard_regenerate_random_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик случайной перегенерации текста."""
     await callback.answer()
@@ -484,7 +573,7 @@ async def wizard_regenerate_random_handler(callback: CallbackQuery, state: FSMCo
     await wizard_start_text_generation(callback.message, state)
 
 
-@wizard_router.callback_query(F.data == "wizard_regenerate_custom")
+@create_content_wizard.callback_query(F.data == "wizard_regenerate_custom")
 async def wizard_regenerate_custom_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик перегенерации с указанием причины."""
     await callback.answer()
@@ -497,7 +586,7 @@ async def wizard_regenerate_custom_handler(callback: CallbackQuery, state: FSMCo
     await state.set_state(ContentWizard.waiting_for_wizard_text_regenerate)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_text_regenerate, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_text_regenerate, F.text)
 async def wizard_text_regenerate_custom_handler(message: Message, state: FSMContext):
     """Обработка причины перегенерации текста."""
     regenerate_reason = message.text.strip()
@@ -516,7 +605,7 @@ async def wizard_text_regenerate_custom_handler(message: Message, state: FSMCont
 
 # ===== ОБРАБОТЧИКИ РЕДАКТИРОВАНИЯ ТЕКСТА =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_text_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_text_edit, F.text)
 async def wizard_text_edit_handler(message: Message, state: FSMContext):
     """Обработка редактирования текста."""
     edit_instruction = message.text.strip()
@@ -530,13 +619,12 @@ async def wizard_text_edit_handler(message: Message, state: FSMContext):
     try:
         # Получаем текущий сгенерированный текст
         data = await state.get_data()
-        current_text = data.get("generated_text", "")
+        current_text = data.get["generated_text"]
 
         # Используем text_editing сервис для редактирования
-        from services.text_editing import TextEditingService
 
-        editing_service = TextEditingService()
-        edited_text = await editing_service.edit_text(
+        text_generation_service: TextGenerationService = TextGenerationService()
+        edited_text = await text_generation_service.edit_text(
             text=current_text,
             instructions=edit_instruction
         )
@@ -547,7 +635,7 @@ async def wizard_text_edit_handler(message: Message, state: FSMContext):
             "✅ **Текст отредактирован!**\n\n"
             f"{edited_text}\n\n"
             "**Что делать с текстом?**",
-            reply_markup=get_wizard_text_management_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_text_result)
@@ -556,13 +644,13 @@ async def wizard_text_edit_handler(message: Message, state: FSMContext):
         logger.exception(f"Ошибка редактирования текста: {e}")
         await message.answer(
             "❌ Ошибка редактирования текста. Попробуйте снова.",
-            reply_markup=get_wizard_text_management_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
         )
 
 
 # ===== ОБРАБОТЧИКИ ИЗМЕНЕНИЯ ПОЛЕЙ =====
 
-@wizard_router.callback_query(F.data == "wizard_edit_event_type")
+@create_content_wizard.callback_query(F.data == "wizard_edit_event_type")
 async def wizard_edit_event_type_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
@@ -573,7 +661,7 @@ async def wizard_edit_event_type_handler(callback: CallbackQuery, state: FSMCont
     await state.set_state(ContentWizard.waiting_for_wizard_event_type_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_edit_event_date")
+@create_content_wizard.callback_query(F.data == "wizard_edit_event_date")
 async def wizard_edit_event_date_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
@@ -584,7 +672,7 @@ async def wizard_edit_event_date_handler(callback: CallbackQuery, state: FSMCont
     await state.set_state(ContentWizard.waiting_for_wizard_event_date_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_edit_event_place")
+@create_content_wizard.callback_query(F.data == "wizard_edit_event_place")
 async def wizard_edit_event_place_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
@@ -595,7 +683,7 @@ async def wizard_edit_event_place_handler(callback: CallbackQuery, state: FSMCon
     await state.set_state(ContentWizard.waiting_for_wizard_event_place_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_edit_event_audience")
+@create_content_wizard.callback_query(F.data == "wizard_edit_event_audience")
 async def wizard_edit_event_audience_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
@@ -606,7 +694,7 @@ async def wizard_edit_event_audience_handler(callback: CallbackQuery, state: FSM
     await state.set_state(ContentWizard.waiting_for_wizard_event_audience_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_edit_event_details")
+@create_content_wizard.callback_query(F.data == "wizard_edit_event_details")
 async def wizard_edit_event_details_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
@@ -617,27 +705,37 @@ async def wizard_edit_event_details_handler(callback: CallbackQuery, state: FSMC
     await state.set_state(ContentWizard.waiting_for_wizard_event_details_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_edit_narrative_style")
+@create_content_wizard.callback_query(F.data == "wizard_edit_narrative_style")
 async def wizard_edit_narrative_style_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
         "🎨 **Изменение стиля повествования**",
-        reply_markup=get_narrative_style_keyboard(),
+        reply_markup=NARRATIVE_STYLE_KEYBOARD,
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_narrative_style_edit)
 
+PLATFORM_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        # [InlineKeyboardButton(text="📱 ВКонтакте (для молодежи)", callback_data="platform_vk")],
+        [InlineKeyboardButton(text="💬 Telegram (для взрослых/бизнеса)", callback_data="platform_telegram")],
+        # [InlineKeyboardButton(text="🌐 Сайт (для информационных материалов)", callback_data="platform_website")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_previous")]
+    ]
+)
 
-@wizard_router.callback_query(F.data == "wizard_edit_platform")
+
+@create_content_wizard.callback_query(F.data == "wizard_edit_platform")
 async def wizard_edit_platform_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
         "📱 **Изменение платформы**",
-        reply_markup=get_platform_keyboard(),
+        reply_markup=PLATFORM_KEYBOARD,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_platform_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_back_to_text_result")
+@create_content_wizard.callback_query(F.data == "wizard_back_to_text_result")
 async def wizard_back_to_text_result_handler(callback: CallbackQuery, state: FSMContext):
     """Возврат к результату генерации текста."""
     await callback.answer()
@@ -646,7 +744,7 @@ async def wizard_back_to_text_result_handler(callback: CallbackQuery, state: FSM
     generated_text = data.get("generated_text", "")
     await callback.message.answer(
         f"✅ **Текст поста:**\n\n{generated_text}\n\n**Что делать с текстом?**",
-        reply_markup=get_wizard_text_management_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_text_result)
@@ -654,88 +752,52 @@ async def wizard_back_to_text_result_handler(callback: CallbackQuery, state: FSM
 
 # ===== ОБРАБОТЧИКИ ИЗМЕНЕНИЯ ПОЛЕЙ (ВВОД ТЕКСТА) =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_type_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_type_edit, F.text)
 async def wizard_update_event_type_handler(message: Message, state: FSMContext):
     event_type = message.text.strip()
     await state.update_data(event_type=event_type)
     await wizard_regenerate_after_field_change(message, state)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_date_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_date_edit, F.text)
 async def wizard_update_event_date_handler(message: Message, state: FSMContext):
     event_date = message.text.strip()
     await state.update_data(event_date=event_date)
     await wizard_regenerate_after_field_change(message, state)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_place_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_place_edit, F.text)
 async def wizard_update_event_place_handler(message: Message, state: FSMContext):
     event_place = message.text.strip()
     await state.update_data(event_place=event_place)
     await wizard_regenerate_after_field_change(message, state)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_audience_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_audience_edit, F.text)
 async def wizard_update_event_audience_handler(message: Message, state: FSMContext):
     event_audience = message.text.strip()
     await state.update_data(event_audience=event_audience)
     await wizard_regenerate_after_field_change(message, state)
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_event_details_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_event_details_edit, F.text)
 async def wizard_update_event_details_handler(message: Message, state: FSMContext):
     event_details = message.text.strip()
     await state.update_data(event_details=event_details)
     await wizard_regenerate_after_field_change(message, state)
 
 
-@wizard_router.callback_query(F.data == "narrative_conversational", ContentWizard.waiting_for_wizard_narrative_style_edit)
-async def wizard_update_narrative_conversational_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.update_data(narrative_style="💬 Разговорный стиль")
-    await wizard_regenerate_after_field_change(callback.message, state)
 
-
-@wizard_router.callback_query(F.data == "narrative_official", ContentWizard.waiting_for_wizard_narrative_style_edit)
+@create_content_wizard.callback_query(F.data == "narrative_official", ContentWizard.waiting_for_wizard_narrative_style_edit)
 async def wizard_update_narrative_official_handler(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.update_data(narrative_style="📋 Официально-деловой стиль")
     await wizard_regenerate_after_field_change(callback.message, state)
 
 
-@wizard_router.callback_query(F.data == "narrative_artistic", ContentWizard.waiting_for_wizard_narrative_style_edit)
-async def wizard_update_narrative_artistic_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.update_data(narrative_style="🎨 Художественный стиль")
-    await wizard_regenerate_after_field_change(callback.message, state)
 
 
-@wizard_router.callback_query(F.data == "narrative_motivational", ContentWizard.waiting_for_wizard_narrative_style_edit)
-async def wizard_update_narrative_motivational_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.update_data(narrative_style="🌟 Позитивный/мотивирующий стиль")
-    await wizard_regenerate_after_field_change(callback.message, state)
 
-
-@wizard_router.callback_query(F.data == "platform_vk", ContentWizard.waiting_for_wizard_platform_edit)
-async def wizard_update_platform_vk_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.update_data(platform="📱 ВКонтакте (для молодежи)")
-    await wizard_regenerate_after_field_change(callback.message, state)
-
-
-@wizard_router.callback_query(F.data == "platform_telegram", ContentWizard.waiting_for_wizard_platform_edit)
-async def wizard_update_platform_telegram_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.update_data(platform="💬 Telegram (для взрослых/бизнеса)")
-    await wizard_regenerate_after_field_change(callback.message, state)
-
-
-@wizard_router.callback_query(F.data == "platform_website", ContentWizard.waiting_for_wizard_platform_edit)
-async def wizard_update_platform_website_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.update_data(platform="🌐 Сайт (для информационных материалов)")
-    await wizard_regenerate_after_field_change(callback.message, state)
 
 
 async def wizard_regenerate_after_field_change(message, state: FSMContext):
@@ -750,7 +812,7 @@ async def wizard_regenerate_after_field_change(message, state: FSMContext):
 
 # ===== ЭТАП 3: РАБОТА С ИЗОБРАЖЕНИЕМ =====
 
-@wizard_router.callback_query(F.data == "wizard_image_ai")
+@create_content_wizard.callback_query(F.data == "wizard_image_ai")
 async def wizard_image_ai_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора генерации ИИ изображения."""
     await callback.answer()
@@ -766,7 +828,7 @@ async def wizard_image_ai_handler(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ContentWizard.waiting_for_wizard_image_prompt)
 
 
-@wizard_router.callback_query(F.data == "wizard_image_upload")
+@create_content_wizard.callback_query(F.data == "wizard_image_upload")
 async def wizard_image_upload_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора загрузки пользовательского фото."""
     await callback.answer()
@@ -780,8 +842,18 @@ async def wizard_image_upload_handler(callback: CallbackQuery, state: FSMContext
     )
     await state.set_state(ContentWizard.waiting_for_wizard_image_user_upload)
 
+WIZARD_FINAL_CONFIRM_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🎨 Создать контент", callback_data="wizard_create_content")],
+        [InlineKeyboardButton(text="🔄 Изменить настройки", callback_data="wizard_modify_settings")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="wizard_back_to_image")],
+        # FIXME: не работает
+        # [InlineKeyboardButton(text="🏠 В главное меню", callback_data="wizard_back_to_main")]
+    ]
+)
 
-@wizard_router.callback_query(F.data == "wizard_image_none")
+
+@create_content_wizard.callback_query(F.data == "wizard_image_none")
 async def wizard_image_none_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик выбора без изображения."""
     await callback.answer()
@@ -790,7 +862,7 @@ async def wizard_image_none_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "✅ **Выбрано: Без фото**\n\n"
         "**Готово к финальной генерации контента?**",
-        reply_markup=get_wizard_final_confirm_keyboard(),
+        reply_markup=WIZARD_FINAL_CONFIRM_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
@@ -798,7 +870,17 @@ async def wizard_image_none_handler(callback: CallbackQuery, state: FSMContext):
 
 # ===== ОБРАБОТКА ПРОМПТА ИЗОБРАЖЕНИЯ =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_image_prompt, F.text)
+WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перегенерировать промпт", callback_data="wizard_prompt_regenerate")],
+        [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data="wizard_prompt_edit")],
+        [InlineKeyboardButton(text="✅ Сгенерировать изображение", callback_data="wizard_generate_image")],
+        [InlineKeyboardButton(text="⬅️ К источнику изображения", callback_data="wizard_back_to_image_source")]
+    ]
+)
+
+
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_image_prompt, F.text)
 async def wizard_image_prompt_handler(message: Message, state: FSMContext):
     """Обработка описания изображения."""
     image_prompt = message.text.strip()
@@ -813,7 +895,8 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
 
     try:
         # Получаем сервис генерации текста для улучшения промпта
-        text_generation_service = dp["text_content_generation_service"]
+        text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
+        card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
 
         # Системный промпт для улучшения промпта изображений
         system_prompt = (
@@ -835,8 +918,9 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
 
         # Вызываем GPT для улучшения промпта
         logger.info(f"Начинаю улучшение промпта: '{image_prompt}'")
-        raw_response = await text_generation_service.gpt_client.generate(user_prompt, system_prompt)
-        enhanced_prompt = text_generation_service.response_processor.process_response(raw_response)
+
+        # FIXME: улучши промпт
+        enhanced_prompt = await card_generation_service.enhance_prompt(user_prompt, system_prompt)
 
         # Сохраняем улучшенный промпт
         await state.update_data(enhanced_image_prompt=enhanced_prompt)
@@ -847,7 +931,7 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
             "✅ **Улучшенный промпт готов:**\n\n"
             f"```\n{enhanced_prompt}\n```\n\n"
             "**Что делать с промптом?**",
-            reply_markup=get_wizard_image_prompt_preview_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.update_data(enhanced_image_prompt=enhanced_prompt)
@@ -857,12 +941,12 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
         logger.exception(f"Ошибка улучшения промпта: {e}")
         await message.answer(
             "⚠️ Не удалось улучшить промпт. Продолжаем с оригиналом.",
-            reply_markup=get_wizard_image_prompt_preview_keyboard(),
+            reply_markup=WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_image_prompt_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_prompt_regenerate")
+@create_content_wizard.callback_query(F.data == "wizard_prompt_regenerate")
 async def wizard_prompt_regenerate_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик перегенерации промпта."""
     await callback.answer()
@@ -875,7 +959,7 @@ async def wizard_prompt_regenerate_handler(callback: CallbackQuery, state: FSMCo
     await state.set_state(ContentWizard.waiting_for_wizard_image_prompt)
 
 
-@wizard_router.callback_query(F.data == "wizard_prompt_edit")
+@create_content_wizard.callback_query(F.data == "wizard_prompt_edit")
 async def wizard_prompt_edit_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик редактирования промпта."""
     await callback.answer()
@@ -889,13 +973,26 @@ async def wizard_prompt_edit_handler(callback: CallbackQuery, state: FSMContext)
     await state.set_state(ContentWizard.waiting_for_wizard_image_prompt_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_generate_image")
+WIZARD_IMAGE_MANAGEMENT_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перегенерировать", callback_data="wizard_image_regenerate")],
+        [InlineKeyboardButton(text="✏️ Изменить промпт", callback_data="wizard_image_edit_prompt")],
+        [InlineKeyboardButton(text="🎨 Генерация карточки", callback_data="wizard_create_content")],
+        [InlineKeyboardButton(text="⬅️ К тексту", callback_data="wizard_back_to_text")],
+        [InlineKeyboardButton(text="↩️ К источнику", callback_data="wizard_back_to_image_source")]
+    ]
+)
+
+
+@create_content_wizard.callback_query(F.data == "wizard_generate_image")
 async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик генерации изображения."""
     await callback.answer()
 
-    await callback.message.answer(
-        "🎨 **Генерируем изображение...**",
+
+    await callback.message.answer_photo(
+        photo=IMAGE_GENERATION_PHOTO,
+        caption="🎨 **Генерируем изображение...**",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -904,14 +1001,16 @@ async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMConte
         data = await state.get_data()
         image_prompt = data.get("enhanced_image_prompt", data.get("image_prompt", ""))
 
-        image_generation_service = dp.get("image_generation_service")
+        image_generation_service = dispatcher.get("image_generation_service")
         if not image_generation_service:
             raise Exception("Сервис генерации изображений не настроен")
 
         generated_image = await image_generation_service.generate_image(
             prompt=image_prompt,
-            width=1024,
-            height=768
+            dimensions=Dimensions(
+                width=1024,
+                height=1024,
+            ),
         )
 
         await state.update_data(generated_image=generated_image)
@@ -920,7 +1019,7 @@ async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMConte
         await callback.message.answer_photo(
             photo=BufferedInputFile(generated_image, "wizard_generated_image.png"),
             caption="✅ **Изображение готово!**\n\n**Что делать дальше?**",
-            reply_markup=get_wizard_image_management_keyboard(),
+            reply_markup=WIZARD_IMAGE_MANAGEMENT_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN
         )
         await state.set_state(ContentWizard.waiting_for_wizard_image_result)
@@ -929,14 +1028,14 @@ async def wizard_generate_image_handler(callback: CallbackQuery, state: FSMConte
         logger.exception(f"Ошибка генерации изображения: {e}")
         await callback.message.answer(
             "❌ Ошибка генерации изображения. Попробуйте заново.",
-            reply_markup=get_wizard_image_source_keyboard(),
+            reply_markup=WIZARD_IMAGE_SOURCE_KEYBOARD,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_image_source)
 
 
 # ===== ОБРАБОТКА ЗАГРУЗКИ ПОЛЬЗОВАТЕЛЬСКОГО ИЗОБРАЖЕНИЯ =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_image_user_upload, F.photo)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_image_user_upload, F.photo)
 async def wizard_user_image_handler(message: Message, state: FSMContext):
     """Обработчик загрузки пользовательского фото."""
     if not message.photo:
@@ -944,7 +1043,6 @@ async def wizard_user_image_handler(message: Message, state: FSMContext):
         return
 
     photo = message.photo[-1]
-    from app import bot
 
     try:
         image_file = await bot.download(photo.file_id, destination=None)
@@ -955,7 +1053,7 @@ async def wizard_user_image_handler(message: Message, state: FSMContext):
         await message.answer(
             "✅ **Изображение загружено!**\n\n"
             "**Готово к финальной генерации контента?**",
-            reply_markup=get_wizard_final_confirm_keyboard(),
+            reply_markup=WIZARD_FINAL_CONFIRM_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
@@ -968,7 +1066,7 @@ async def wizard_user_image_handler(message: Message, state: FSMContext):
         )
 
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_image_user_upload, F.document)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_image_user_upload, F.document)
 async def wizard_user_document_handler(message: Message, state: FSMContext):
     """Обработчик загрузки пользовательского документа с изображением."""
     if not message.document:
@@ -979,8 +1077,6 @@ async def wizard_user_document_handler(message: Message, state: FSMContext):
         await message.answer("Пожалуйста, отправьте файл с изображением.")
         return
 
-    from app import bot
-
     try:
         document_file = await bot.download(message.document.file_id, destination=None)
         image_bytes = document_file.read()
@@ -990,7 +1086,7 @@ async def wizard_user_document_handler(message: Message, state: FSMContext):
         await message.answer(
             "✅ **Изображение загружено!**\n\n"
             "**Готово к финальной генерации контента?**",
-            reply_markup=get_wizard_final_confirm_keyboard(),
+            reply_markup=WIZARD_FINAL_CONFIRM_KEYBOARD,
             parse_mode=ParseMode.MARKDOWN,
         )
         await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
@@ -1005,14 +1101,14 @@ async def wizard_user_document_handler(message: Message, state: FSMContext):
 
 # ===== УПРАВЛЕНИЕ СГЕНЕРИРОВАННЫМ ИЗОБРАЖЕНИЕМ =====
 
-@wizard_router.callback_query(F.data == "wizard_image_regenerate")
+@create_content_wizard.callback_query(F.data == "wizard_image_regenerate")
 async def wizard_image_regenerate_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик перегенерации изображения."""
     await callback.answer()
     await wizard_generate_image_handler(callback, state)
 
 
-@wizard_router.callback_query(F.data == "wizard_image_edit_prompt")
+@create_content_wizard.callback_query(F.data == "wizard_image_edit_prompt")
 async def wizard_image_edit_prompt_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик редактирования промпта изображения."""
     await callback.answer()
@@ -1024,7 +1120,7 @@ async def wizard_image_edit_prompt_handler(callback: CallbackQuery, state: FSMCo
     await state.set_state(ContentWizard.waiting_for_wizard_image_prompt)
 
 
-@wizard_router.callback_query(F.data == "wizard_finish")
+@create_content_wizard.callback_query(F.data == "wizard_finish")
 async def wizard_finish_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик завершения Wizard."""
     await callback.answer()
@@ -1032,7 +1128,7 @@ async def wizard_finish_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "🎉 **Готово к финальной генерации контента!**\n\n"
         "Нажмите кнопку ниже для создания финального поста и карточек.",
-        reply_markup=get_wizard_final_confirm_keyboard(),
+        reply_markup=WIZARD_FINAL_CONFIRM_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_final_confirm)
@@ -1040,19 +1136,19 @@ async def wizard_finish_handler(callback: CallbackQuery, state: FSMContext):
 
 # ===== ЭТАП 4: ФИНАЛЬНОЕ ЗАВЕРШЕНИЕ =====
 
-@wizard_router.callback_query(F.data == "wizard_back_to_image_source")
+@create_content_wizard.callback_query(F.data == "wizard_back_to_image_source")
 async def wizard_back_to_image_source_handler(callback: CallbackQuery, state: FSMContext):
     """Возврат к выбору источника изображения."""
     await callback.answer()
 
     await callback.message.answer(
         "🖼️ **Выберите источник изображения:**",
-        reply_markup=get_wizard_image_source_keyboard(),
+        reply_markup=WIZARD_IMAGE_SOURCE_KEYBOARD,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_image_source)
 
 
-@wizard_router.callback_query(F.data == "wizard_back_to_text")
+@create_content_wizard.callback_query(F.data == "wizard_back_to_text")
 async def wizard_back_to_text_handler(callback: CallbackQuery, state: FSMContext):
     """Возврат к результату генерации текста."""
     await callback.answer()
@@ -1064,13 +1160,13 @@ async def wizard_back_to_text_handler(callback: CallbackQuery, state: FSMContext
         "✅ **Текст поста:**\n\n"
         f"{generated_text}\n\n"
         "**Что делать с текстом?**",
-        reply_markup=get_wizard_text_management_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_MANAGEMENT_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_text_result)
 
 
-@wizard_router.callback_query(F.data == "wizard_modify_settings")
+@create_content_wizard.callback_query(F.data == "wizard_modify_settings")
 async def wizard_modify_settings_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик модификации настроек."""
     await callback.answer()
@@ -1078,31 +1174,45 @@ async def wizard_modify_settings_handler(callback: CallbackQuery, state: FSMCont
     await callback.message.answer(
         "⚙️ **Модификация настроек**\n\n"
         "Возврат к этапу настройки параметров. Что хотите изменить?",
-        reply_markup=get_wizard_field_select_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_FIELD_SELECT_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_field_select)
 
 
-@wizard_router.callback_query(F.data == "wizard_back_to_image")
+WIZARD_CARD_READY_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Перегенерировать карточки", callback_data="wizard_regenerate_card")],
+        [InlineKeyboardButton(text="✏️ Изменить текст карточки", callback_data="wizard_edit_card_text")],
+        [InlineKeyboardButton(text="📝 Написать промпт для карточки", callback_data="wizard_write_card_prompt")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="wizard_back_to_main")]
+    ]
+)
+
+
+@create_content_wizard.callback_query(F.data == "wizard_back_to_image")
 async def wizard_back_to_image_handler(callback: CallbackQuery, state: FSMContext):
     """Возврат к этапу работы с изображением."""
     await callback.answer()
 
     await callback.message.answer(
         "🖼️ **Выберите источник изображения:**",
-        reply_markup=get_wizard_image_source_keyboard(),
+        reply_markup=WIZARD_IMAGE_SOURCE_KEYBOARD,
+        parse_mode=ParseMode.MARKDOWN,
     )
     await state.set_state(ContentWizard.waiting_for_wizard_image_source)
 
 
-@wizard_router.callback_query(F.data == "wizard_create_content")
+# FIXME: этот обработчик используется
+@create_content_wizard.callback_query(F.data == "wizard_create_content")
 async def wizard_create_content_handler(callback: CallbackQuery, state: FSMContext):
     """Финальная генерация только карточек (текст уже готов)."""
     await callback.answer()
 
-    await callback.message.answer(
-        "🎨 **Создаем информационные карточки...**",
+
+    await callback.message.answer_photo(
+        photo=CARD_GENERATION_PHOTO,
+        content="🎨 **Создаем информационные карточки...**",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -1110,32 +1220,25 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
     try:
         # Получаем сохраненные данные из Wizard
         data = await state.get_data()
-        generated_text = data.get("generated_text", "")
-        platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
+        generated_text = data["generated_text"]
 
         # Получаем информацию об НКО из базы данных
-        ngo_service = dp["ngo_service"]
+        ngo_service = dispatcher["ngo_service"]
         user_id = callback.from_user.id
-        ngo_data = ngo_service.get_ngo_data(user_id)
+        ngo_data: Ngo = ngo_service.get_ngo_data_by_user_id(user_id)
 
-        # Устанавливаем значения по умолчанию
-        ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
-        ngo_contact = ngo_data.get("ngo_contact", "тел: +7 (XXX) XXX-XX-XX") if ngo_data else "тел: +7 (XXX) XXX-XX-XX"
 
         # Получаем изображение (уже должно быть сгенерировано на предыдущих этапах)
-        generated_image = None
-        image_source = data.get("image_source", "")
+        generated_image: bytes = None
+        image_source = data["image_source"]
         if image_source == "🤖 Сгенерировать ИИ":
-            generated_image = data.get("generated_image")
+            generated_image = data["generated_image"]
         elif image_source == "📎 Загрузить своё":
-            generated_image = data.get("user_image")
+            generated_image = data["user_image"]
 
         # Определяем подзаголовок в зависимости от режима
-        wizard_mode = data.get("wizard_mode", "structured")
-        if wizard_mode == "structured":
-            subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
-        else:
-            subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
+        wizard_mode = data["wizard_mode"]
+
 
         # Создаем краткий контент для карточки
         await callback.message.answer(
@@ -1145,9 +1248,11 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
 
         try:
             # Генерируем сокращенный контент специально для карточки
-            from services.content_generation import TextContentGenerationService
-            card_text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
-            card_content = await card_text_generation_service.generate_card_content(data, generated_text)
+            card_text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
+            card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
+
+            card_text_generation_context = PromptContext.from_dict(data)
+            card_content = await card_generation_service.generate_card_text(card_text_generation_context, generated_text)
 
             # Используем сгенерированный сокращенный контент, если он получился подходящим
             if card_content and len(card_content.strip()) > 10 and len(card_content.strip()) < 300:
@@ -1174,130 +1279,55 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
             reply_markup=ReplyKeyboardRemove(),
         )
 
-        try:
-            # Используем GPT для генерации привлекательного заголовка
-            title_generation_prompt = (
-                f"Исходный текст поста: {card_content_for_template}\n\n"
-                "Создай короткий, привлекательный заголовок (5-7 слов) для информационной карточки НКО. "
-                "Заголовок должен быть ярким, мотивирующим и побуждать к участию. "
-                "Не добавляй кавычки в ответе."
-            )
 
-            title = await card_text_generation_service.generate_text_content(title_generation_prompt, title_generation_prompt)
+        card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
 
-            # Очищаем и ограничиваем длину заголовка
-            if title:
-                title = title.strip()
-                if len(title) > 50:  # Ограничиваем длину
-                    title = title[:47] + "..."
-            else:
-                # Fallback если GPT не сгенерировал заголовок
-                title = data.get('event_type', 'Событие НКО')[:30] + "..."
-
-            await callback.message.answer(
-                f"✅ Заголовок готов: **{title}**",
-                reply_markup=ReplyKeyboardRemove(),
-                parse_mode=ParseMode.MARKDOWN,
-            )
-
-        except Exception as e:
-            logger.exception("Ошибка генерации заголовка для карточки, используем fallback")
-            # Fallback заголовок
-            title = data.get('event_type', 'Событие НКО')[:30] + "..."
-            if len(title) <= 3 or title == "...":  # Если получился слишком короткий
-                title = "Присоединяйтесь к событию!"
-
-        # Подготавливаем данные для генерации карточек
-        from bot.utils import (
-            get_title_by_goal,
-            get_color_by_goal,
-            get_secondary_color_by_goal,
-            get_template_by_platform,
+        # FIXME: Телеграм захардкожен
+        parameters = RenderParameters(
+            template=CardTemplate.TELEGRAM
         )
 
-        goal = "🎯 Рассказать о мероприятии"  # Можем получить из данных Wizard
 
-        template_data = {
-            "title": title,
-            "subtitle": subtitle or "",
-            "content": card_content_for_template,
-            "org_name": ngo_name or "Ваша НКО",
-            "contact_info": ngo_contact or "",
-            "primary_color": get_color_by_goal(goal) or "#667eea",
-            "secondary_color": get_secondary_color_by_goal(goal) or "#764ba2",
-            "text_color": "#333333",
-            "background_color": "#f5f7fa",
-        }
 
-        # Добавляем специфические данные для структурированной формы
-        if wizard_mode == "structured":
-            template_data.update({
-                "event_type": data.get('event_type', ''),
-                "event_date": data.get('event_date', ''),
-                "event_place": data.get('event_place', ''),
-                "event_audience": data.get('event_audience', ''),
-                "event_details": data.get('event_details', ''),
-                "narrative_style": data.get('narrative_style', ''),
-            })
 
-        # Добавляем данные для свободной формы
-        if wizard_mode == "free_form":
-            template_data.update({
-                "user_description": data.get('user_description', ''),
-                "narrative_style": data.get('narrative_style', ''),
-            })
+        title = await card_generation_service.generate_card_title(generated_text)
 
-        # Добавляем изображение для фона карточки
-        if generated_image:
-            template_data["background_image_bytes"] = generated_image
-            logger.info(f"Фоновое изображение добавлено: {len(generated_image)} байт")
+        # Устанавливаем значения по умолчанию
+        ngo_name = ngo_data.name
+        ngo_contact = ngo_data.contacts
+        platform = data["platform"]
 
-        template_name = get_template_by_platform(platform)
-        logger.info(f"Using template: {template_name} for platform: {platform}")
 
-        from services.card_generation import CardGenerationService
-        card_generation_service: CardGenerationService = dp["card_generation_service"]
-
-        cards = await card_generation_service.generate_multiple_cards(
-            template_name=template_name,
-            data=template_data,
-            platform=platform,
+        event_data = EventData(
+            timestamp=data['event_date'],
+            location=data["event_place"],
+            audience=data["event_audience"],
         )
 
-        if not cards:
-            raise ValueError("Генератор карточек ничего не вернул")
 
-        # Отправляем сгенерированное изображение сначала отдельно (если есть)
-        if generated_image and image_source == "🤖 Сгенерировать ИИ":
-            await callback.message.answer(
-                "🖼️ **Ваше сгенерированное изображение:**",
-                reply_markup=ReplyKeyboardRemove(),
-                parse_mode=ParseMode.MARKDOWN,
-            )
-            from aiogram.types.input_file import BufferedInputFile
-            await callback.message.answer_photo(
-                photo=BufferedInputFile(generated_image, "wizard_generated_image.png"),
-                caption="🎨 Сгенерированное ИИ изображение",
-                reply_markup=ReplyKeyboardRemove(),
-            )
+        card_data = CardData(
+            image=generated_image,
+            title=title,
+            ngo_data=ngo_data,
+            event_data=event_data,
+        )
 
-        # Используем импортированную функцию для получения описания типа карточки
-        from bot.utils import get_caption_for_card_type
+        card = await card_generation_service.generate_card(
+            parameters,
+            card_data
+        )
+
 
         await callback.message.answer(
-            "🎨 Вот ваши карточки для соцсетей:",
+            "🎨 Вот ваша карточка для соцсетей:",
             reply_markup=ReplyKeyboardRemove(),
         )
 
-        for card_type, image_bytes in cards.items():
-            caption = get_caption_for_card_type(card_type, platform)
-            from aiogram.types.input_file import BufferedInputFile
-            image_stream = image_bytes
-            await callback.message.answer_photo(
-                photo=BufferedInputFile(image_stream, f"wizard_{card_type}.png"),
-                caption=caption,
-                reply_markup=ReplyKeyboardRemove(),
-            )
+        await callback.message.answer_photo(
+            photo=BufferedInputFile(card, f"wizard_card.png"),
+            # caption=caption,
+            reply_markup=ReplyKeyboardRemove(),
+        )
 
         # Показываем сгенерированный текст и завершаем Wizard
         await callback.message.answer(
@@ -1313,7 +1343,7 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
 
         await callback.message.answer(
             "✨ Все материалы готовы к публикации!",
-            reply_markup=get_wizard_card_ready_keyboard(),
+            reply_markup=WIZARD_CARD_READY_KEYBOARD,
         )
 
         await state.clear()  # Очищаем состояние после успешного завершения
@@ -1322,20 +1352,20 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
         logger.exception(f"Ошибка генерации карточек в Wizard: {e}")
         await callback.message.answer(
             "❌ Ошибка создания карточек. Попробуйте снова.",
-            reply_markup=get_wizard_final_confirm_keyboard(),
+            reply_markup=WIZARD_FINAL_CONFIRM_KEYBOARD,
         )
 
 
 # ===== ОБРАБОТЧИКИ РЕДАКТИРОВАНИЯ ПРОМПТА =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_image_prompt_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_image_prompt_edit, F.text)
 async def wizard_image_prompt_edit_handler(message: Message, state: FSMContext):
     """Обработка редактирования промпта."""
     old_prompt = await state.get_value("enhanced_prompt")
     new_prompt = message.text.strip()
 
     # Получаем сервис генерации текста для улучшения промпта
-    text_generation_service = dp["text_content_generation_service"]
+    text_generation_service = dispatcher["text_content_generation_service"]
 
     # Системный промпт для улучшения промпта изображений
     system_prompt = (
@@ -1367,14 +1397,14 @@ async def wizard_image_prompt_edit_handler(message: Message, state: FSMContext):
         "✅ **Обновленный промпт:**\n\n"
         f"```\n{enhanced_prompt}\n```\n\n"
         "**Что делать с промптом?**",
-        reply_markup=get_wizard_image_prompt_preview_keyboard(),
+        reply_markup=WIZARD_CONTENT_GENERATION_IMAGE_PROMPT_PREVIEW_KEYBOARD,
         parse_mode=ParseMode.MARKDOWN,
     )
 
 
 # ===== ОБРАБОТЧИКИ НАВИГАЦИИ =====
 
-@wizard_router.callback_query(F.data == "wizard_back_to_setup")
+@create_content_wizard.callback_query(F.data == "wizard_back_to_setup")
 async def wizard_back_to_setup_handler(callback: CallbackQuery, state: FSMContext):
     """Возврат к началу настройки."""
     await callback.answer()
@@ -1382,14 +1412,14 @@ async def wizard_back_to_setup_handler(callback: CallbackQuery, state: FSMContex
 
     await callback.message.answer(
         "🔙 Возвращаемся к выбору формы:",
-        reply_markup=get_wizard_mode_keyboard(),
+        reply_markup=CONTENT_WIZARD_SELECT_MODE_KEYBOARD,
     )
 
 
 # ===== ОБРАБОТЧИКИ КОМПЛЕКТАЦИИ КАРТОЧЕК =====
 
-@wizard_router.callback_query(F.data == "wizard_regenerate_cards")
-async def wizard_regenerate_cards_handler(callback: CallbackQuery, state: FSMContext):
+@create_content_wizard.callback_query(F.data == "wizard_regenerate_card")
+async def wizard_regenerate_card_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик перегенерации карточек."""
     await callback.answer()
 
@@ -1411,7 +1441,7 @@ async def wizard_regenerate_cards_handler(callback: CallbackQuery, state: FSMCon
     await wizard_create_content_handler(callback, state)
 
 
-@wizard_router.callback_query(F.data == "wizard_edit_card_text")
+@create_content_wizard.callback_query(F.data == "wizard_edit_card_text")
 async def wizard_edit_card_text_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик редактирования текста карточки."""
     await callback.answer()
@@ -1426,7 +1456,7 @@ async def wizard_edit_card_text_handler(callback: CallbackQuery, state: FSMConte
     await state.set_state(ContentWizard.waiting_for_wizard_card_text_edit)
 
 
-@wizard_router.callback_query(F.data == "wizard_write_card_prompt")
+@create_content_wizard.callback_query(F.data == "wizard_write_card_prompt")
 async def wizard_write_card_prompt_handler(callback: CallbackQuery, state: FSMContext):
     """Обработчик написания промпта для текста карточки."""
     await callback.answer()
@@ -1443,7 +1473,7 @@ async def wizard_write_card_prompt_handler(callback: CallbackQuery, state: FSMCo
 
 # ===== ОБРАБОТКА РЕДАКТИРОВАНИЯ ТЕКСТА КАРТОЧКИ =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_card_text_edit, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_card_text_edit, F.text)
 async def wizard_update_card_text_handler(message: Message, state: FSMContext):
     """Обработка редактирования текста карточки."""
     edit_instruction = message.text.strip()
@@ -1480,19 +1510,19 @@ async def wizard_update_card_text_handler(message: Message, state: FSMContext):
         )
 
         # Перезапускаем генерацию карточек с новым текстом
-        await wizard_regenerate_cards_from_text(message, state, edited_card_text)
+        await wizard_regenerate_card_from_text(message, state, edited_card_text)
 
     except Exception as e:
         logger.exception(f"Ошибка редактирования текста карточки: {e}")
         await message.answer(
             "❌ Ошибка редактирования текста карточки. Попробуем перегенерировать.",
         )
-        await wizard_regenerate_cards_handler_from_message(message, state)
+        await wizard_regenerate_card_handler_from_message(message, state)
 
 
 # ===== ОБРАБОТКА ПРОМПТА ДЛЯ ТЕКСТА КАРТОЧКИ =====
 
-@wizard_router.message(ContentWizard.waiting_for_wizard_card_prompt, F.text)
+@create_content_wizard.message(ContentWizard.waiting_for_wizard_card_prompt, F.text)
 async def wizard_generate_card_from_prompt_handler(message: Message, state: FSMContext):
     """Обработка промпта для создания текста карточки."""
     card_prompt = message.text.strip()
@@ -1505,7 +1535,7 @@ async def wizard_generate_card_from_prompt_handler(message: Message, state: FSMC
 
     try:
         # Генерируем новый текст для карточки на основе промпта
-        text_generation_service = dp["text_content_generation_service"]
+        text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
 
         # Получаем данные из state
         data = await state.get_data()
@@ -1518,7 +1548,7 @@ async def wizard_generate_card_from_prompt_handler(message: Message, state: FSMC
             "Создай краткий текст (до 300 символов) для информационной карточки НКО."
         )
 
-        card_text = await text_generation_service.generate_text_content(card_generation_prompt, card_generation_prompt)
+        card_text = await text_generation_service.generate_text(card_generation_prompt, card_generation_prompt)
 
         if card_text and len(card_text.strip()) > 10 and len(card_text.strip()) < 300:
             await state.update_data(card_custom_text=card_text.strip())
@@ -1531,11 +1561,11 @@ async def wizard_generate_card_from_prompt_handler(message: Message, state: FSMC
             )
 
             # Перезапускаем генерацию карточек с новым текстом
-            await wizard_regenerate_cards_from_text(message, state, card_text.strip())
+            await wizard_regenerate_card_from_text(message, state, card_text.strip())
         else:
             await message.answer(
                 "⚠️ **Созданный текст не подходит для карточки. Попробуйте другой промпт.**",
-                reply_markup=get_wizard_card_ready_keyboard(),
+                reply_markup=WIZARD_CARD_READY_KEYBOARD,
             )
 
     except Exception as e:
@@ -1543,40 +1573,42 @@ async def wizard_generate_card_from_prompt_handler(message: Message, state: FSMC
         await message.answer(
             "❌ Ошибка создания текста карточки. Попробуйте перегенерацию.",
         )
-        await wizard_regenerate_cards_handler_from_message(message, state)
+        await wizard_regenerate_card_handler_from_message(message, state)
 
 
-async def wizard_regenerate_cards_from_text(message: Message, state: FSMContext, card_text: str):
+async def wizard_regenerate_card_from_text(message: Message, state: FSMContext, card_text: str):
     """Перегенерация карточек с указанным текстом."""
+
+    card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
+
     try:
         # Получаем сохраненные данные из Wizard
         data = await state.get_data()
-        platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
+        platform = data["platform"]
 
         # Получаем информацию об НКО из базы данных
-        from app import dp
-        ngo_service = dp["ngo_service"]
+        ngo_service: TextGenerationService = dispatcher["ngo_service"]
         user_id = message.from_user.id
-        ngo_data = ngo_service.get_ngo_data(user_id)
+        ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
 
         # Устанавливаем значения по умолчанию
-        ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
-        ngo_contact = ngo_data.get("ngo_contact", "тел: +7 (XXX) XXX-XX-XX") if ngo_data else "тел: +7 (XXX) XXX-XX-XX"
+        ngo_name = ngo_data.name
+        ngo_contact = ngo_data.contacts
 
         # Получаем изображение
         generated_image = None
-        image_source = data.get("image_source", "")
+        image_source = data["image_source"]
         if image_source == "🤖 Сгенерировать ИИ":
-            generated_image = data.get("generated_image")
+            generated_image = data["generated_image"]
         elif image_source == "📎 Загрузить своё":
-            generated_image = data.get("user_image")
+            generated_image = data["user_image"]
 
         # Определяем подзаголовок в зависимости от режима
-        wizard_mode = data.get("wizard_mode", "structured")
+        wizard_mode = data["wizard_mode"]
         if wizard_mode == "structured":
-            subtitle = f"Событие: {data.get('event_type', 'мероприятие')}"
+            subtitle = f"Событие: {data['event_type']}"
         else:
-            subtitle = f"Для {data.get('event_audience', 'наших подопечных')}"
+            subtitle = f"Для {data['event_audience']}"
 
         # Генерируем заголовок для карточки на основе текста
         await message.answer(
@@ -1593,7 +1625,7 @@ async def wizard_regenerate_cards_from_text(message: Message, state: FSMContext,
                 "Не добавляй кавычки в ответе."
             )
 
-            title = await card_text_generation_service.generate_text_content(title_generation_prompt, title_generation_prompt)
+            title = await card_generation_service.generate_text(title_generation_prompt, title_generation_prompt)
 
             # Очищаем и ограничиваем длину заголовка
             if title:
@@ -1618,12 +1650,7 @@ async def wizard_regenerate_cards_from_text(message: Message, state: FSMContext,
                 title = "Присоединяйтесь к событию!"
 
         # Подготавливаем данные для генерации карточек
-        from bot.utils import (
-            get_title_by_goal,
-            get_color_by_goal,
-            get_secondary_color_by_goal,
-            get_template_by_platform,
-        )
+
 
         goal = "🎯 Рассказать о мероприятии"
         template_data = {
@@ -1632,7 +1659,6 @@ async def wizard_regenerate_cards_from_text(message: Message, state: FSMContext,
             "content": card_text,  # Используем переданный кастомный текст
             "org_name": ngo_name or "Ваша НКО",
             "contact_info": ngo_contact or "",
-            "primary_color": get_color_by_goal(goal) or "#667eea",
             "secondary_color": get_secondary_color_by_goal(goal) or "#764ba2",
             "text_color": "#333333",
             "background_color": "#f5f7fa",
@@ -1661,49 +1687,40 @@ async def wizard_regenerate_cards_from_text(message: Message, state: FSMContext,
             template_data["background_image_bytes"] = generated_image
 
         from services.card_generation import CardGenerationService
-        card_generation_service: CardGenerationService = dp["card_generation_service"]
-        template_name = get_template_by_platform(platform)
+        card_generation_service: CardGenerationService = Dispatcher["card_generation_service"]
 
-        cards = await card_generation_service.generate_multiple_cards(
-            template_name=template_name,
-            data=template_data,
-            platform=platform,
+        card = await card_generation_service.generate_card(
+            parameters,
+            data,
         )
-
-        if not cards:
-            raise ValueError("Генератор карточек ничего не вернул")
-
-        # Отправляем результаты
-        from bot.utils import get_caption_for_card_type
 
         await message.answer(
             "🎨 **Обновленные карточки для соцсетей:**",
             reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.MARKDOWN,
         )
 
-        for card_type, image_bytes in cards.items():
-            caption = get_caption_for_card_type(card_type, platform)
-            from aiogram.types.input_file import BufferedInputFile
-            await message.answer_photo(
-                photo=BufferedInputFile(image_bytes, f"updated_wizard_{card_type}.png"),
-                caption=caption,
-                reply_markup=ReplyKeyboardRemove(),
-            )
+        await message.answer_photo(
+            photo=BufferedInputFile(card, f"updated_wizard_card.png"),
+            # caption=caption,
+            reply_markup=ReplyKeyboardRemove(),
+        )
 
         await message.answer(
             "✨ **Обновленные материалы готовы к публикации!**",
-            reply_markup=get_wizard_card_ready_keyboard(),
+            reply_markup=WIZARD_CARD_READY_KEYBOARD,
         )
 
     except Exception as e:
         logger.exception(f"Ошибка перегенерации карточек: {e}")
         await message.answer(
             "❌ Ошибка создания обновленных карточек. Попробуйте снова.",
-            reply_markup=get_wizard_card_ready_keyboard(),
+            reply_markup=WIZARD_CARD_READY_KEYBOARD,
         )
 
 
-async def wizard_regenerate_cards_handler_from_message(message: Message, state: FSMContext):
+# FIXME: используетсся?
+async def wizard_regenerate_card_handler_from_message(message: Message, state: FSMContext):
     """Перегенерация карточек из message handler'а."""
     await message.answer(
         "🔄 **Перегенерируем карточки...**",
@@ -1718,9 +1735,9 @@ async def wizard_regenerate_cards_handler_from_message(message: Message, state: 
         platform = data.get("platform", "📱 ВКонтакте (для молодежи)")
 
         # Получаем информацию об НКО из базы данных
-        ngo_service = dp["ngo_service"]
+        ngo_service = dispatcher["ngo_service"]
         user_id = message.from_user.id
-        ngo_data = ngo_service.get_ngo_data(user_id)
+        ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
 
         # Устанавливаем значения по умолчанию
         ngo_name = ngo_data.get("ngo_name", "Ваша НКО") if ngo_data else "Ваша НКО"
@@ -1749,9 +1766,8 @@ async def wizard_regenerate_cards_handler_from_message(message: Message, state: 
 
         try:
             # Генерируем сокращенный контент специально для карточки
-            from services.content_generation import TextContentGenerationService
-            card_text_generation_service: TextContentGenerationService = dp["text_content_generation_service"]
-            card_content = await card_text_generation_service.generate_card_content(data, generated_text)
+            card_text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
+            card_content = await card_text_generation_service.generate_card_text(data, generated_text)
 
             # Используем сгенерированный сокращенный контент, если он получился подходящим
             if card_content and len(card_content.strip()) > 10 and len(card_content.strip()) < 300:
@@ -1787,7 +1803,7 @@ async def wizard_regenerate_cards_handler_from_message(message: Message, state: 
                 "Не добавляй кавычки в ответе."
             )
 
-            title = await card_text_generation_service.generate_text_content(title_generation_prompt, title_generation_prompt)
+            title = await card_text_generation_service.generate_text(title_generation_prompt, title_generation_prompt)
 
             # Очищаем и ограничиваем длину заголовка
             if title:
@@ -1859,17 +1875,13 @@ async def wizard_regenerate_cards_handler_from_message(message: Message, state: 
         template_name = get_template_by_platform(platform)
         logger.info(f"Using template: {template_name} for platform: {platform}")
 
-        from services.card_generation import CardGenerationService
-        card_generation_service: CardGenerationService = dp["card_generation_service"]
+        card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
 
-        cards = await card_generation_service.generate_multiple_cards(
-            template_name=template_name,
-            data=template_data,
-            platform=platform,
+        card = await card_generation_service.generate_card(
+            parameters,
+            data
         )
 
-        if not cards:
-            raise ValueError("Генератор карточек ничего не вернул")
 
         # Отправляем сгенерированное изображение сначала отдельно (если есть)
         if generated_image and image_source == "🤖 Сгенерировать ИИ":
@@ -1885,23 +1897,17 @@ async def wizard_regenerate_cards_handler_from_message(message: Message, state: 
                 reply_markup=ReplyKeyboardRemove(),
             )
 
-        # Используем импортированную функцию для получения описания типа карточки
-        from bot.utils import get_caption_for_card_type
 
         await message.answer(
             "🎨 Вот ваши карточки для соцсетей:",
             reply_markup=ReplyKeyboardRemove(),
         )
 
-        for card_type, image_bytes in cards.items():
-            caption = get_caption_for_card_type(card_type, platform)
-            from aiogram.types.input_file import BufferedInputFile
-            image_stream = image_bytes
-            await message.answer_photo(
-                photo=BufferedInputFile(image_stream, f"wizard_{card_type}.png"),
-                caption=caption,
-                reply_markup=ReplyKeyboardRemove(),
-            )
+        await message.answer_photo(
+            photo=BufferedInputFile(card, f"wizard_card.png"),
+            # caption=caption,
+            reply_markup=ReplyKeyboardRemove(),
+        )
 
         # Показываем сгенерированный текст
         await message.answer(
@@ -1917,12 +1923,54 @@ async def wizard_regenerate_cards_handler_from_message(message: Message, state: 
 
         await message.answer(
             "✨ Все материалы готовы к публикации!",
-            reply_markup=get_wizard_card_ready_keyboard(),
+            reply_markup=WIZARD_CARD_READY_KEYBOARD,
         )
 
     except Exception as e:
         logger.exception(f"Ошибка перегенерации карточек: {e}")
         await message.answer(
             "❌ Ошибка перегенерации карточек. Попробуйте снова.",
-            reply_markup=get_wizard_card_ready_keyboard(),
+            reply_markup=WIZARD_CARD_READY_KEYBOARD,
         )
+
+
+@create_content_wizard.callback_query(F.data == "create_again")
+async def create_again_handler(callback: CallbackQuery, state: FSMContext):
+    from bot.handlers.start import start_handler
+
+    await callback.answer()
+    await state.clear()
+    await start_handler(callback.message, state)
+
+
+@create_content_wizard.callback_query(F.data == "get_tips")
+async def get_tips_handler(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+
+    data = await state.get_data()
+    platform = data.get("platform", "")
+    audience = ", ".join(data.get("audience", [])) or "не указана"
+    goal = data.get("goal", "вашей задачи")
+
+    tips_text = (
+        "💡 Общие советы по продвижению:\n\n"
+        "• Публикуйте регулярно, чтобы аудитория не забывала о вас\n"
+        "• Комбинируйте информационный и эмоциональный контент\n"
+        "• Задавайте вопросы в постах для повышения вовлечённости\n"
+        "• Анализируйте статистику и корректируйте стратегию\n"
+        "• Сотрудничайте с другими НКО для взаимного продвижения"
+    )
+
+    await callback.message.answer(
+        f"Цель: {goal}\nАудитория: {audience}\nПлатформа: {platform or '—'}\n\n{tips_text}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Создать ещё", callback_data="create_again")],
+            ]
+        ),
+    )
+
+
+
+
+

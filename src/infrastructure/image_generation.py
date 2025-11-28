@@ -1,41 +1,98 @@
+"""
+Инфраструктура генерации изображений с использованием ИИ.
+
+Данный модуль предоставляет интерфейсы и реализации для генерации изображений
+с помощью различных AI сервисов. Включает поддержку Fusion Brain API (Kandinsky)
+для создания изображений по текстовым описаниям.
+
+Основные компоненты:
+- AbstractImageGenerator: Абстрактный интерфейс для генераторов изображений
+- FusionBrainImageGenerator: Реализация для работы с Fusion Brain API
+- create_fusion_brain_image_generator(): Фабричная функция для создания генератора
+
+Модуль поддерживает асинхронную генерацию изображений с обработкой ошибок,
+мониторингом статуса и конвертацией результатов в байты.
+"""
+
 import asyncio
 import json
 import logging
 import base64
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import aiohttp
 from aiohttp import FormData
 
-from config import config
+from dtos import Dimensions
 
+# Настройка логирования для модуля
 logger = logging.getLogger(__name__)
 
 
 class AbstractImageGenerator(ABC):
-    """Базовый интерфейс для генераторов изображений."""
+    """
+    Базовый абстрактный класс для генераторов изображений.
+    
+    Определяет интерфейс для всех генераторов изображений,
+    которые могут создавать визуальный контент по текстовому описанию
+    с использованием различных AI сервисов.
+    """
 
     @property
     @abstractmethod
     def model_name(self) -> str:
-        """Возвращает имя модели."""
+        """
+        Возвращает имя модели генератора.
+        
+        Returns:
+            str: Название модели для логирования и идентификации
+        """
         pass
 
     @abstractmethod
-    async def generate(
+    async def generate_image(
         self,
         prompt: str,
-        width: int = 1024,
-        height: int = 1024,
-        images: int = 1,
+        dimensions: Dimensions,
     ) -> bytes:
-        """Генерирует изображение по промпту и возвращает байты изображения."""
+        """
+        Генерирует изображение по текстовому описанию.
+        
+        Args:
+            prompt (str): Текстовое описание желаемого изображения
+            dimensions (Dimensions): Ширина и высота изображения в пикселях
+
+        Returns:
+            bytes: Байты сгенерированного изображения в формате PNG
+            
+        Raises:
+            Exception: При ошибке генерации изображения или недоступности API
+        """
         pass
 
 
 class FusionBrainImageGenerator(AbstractImageGenerator):
-    """Генератор изображений через Fusion Brain API (Kandinski)."""
+    """
+    Генератор изображений через Fusion Brain API (Kandinsky).
+    
+    Реализует генерацию изображений с помощью Kandinsky модели через
+    Fusion Brain API. Поддерживает асинхронную генерацию, мониторинг
+    статуса выполнения и конвертацию результатов в байты.
+    
+    Attributes:
+        api_key (str): API ключ для доступа к Fusion Brain
+        secret_key (str): Секретный ключ для авторизации
+        api_url (str): Базовый URL API сервиса
+        pipeline_id (str): ID пайплайна для генерации (может быть получен динамически)
+        timeout (int): Таймаут запросов в секундах
+        poll_interval (int): Интервал проверки статуса генерации в секундах
+        max_poll_attempts (int): Максимальное количество попыток проверки статуса
+        
+    Note:
+        Использует polling механизм для ожидания завершения генерации.
+        Рекомендуется настроить разумные значения timeout и poll_interval.
+    """
 
     def __init__(
         self,
@@ -48,6 +105,18 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         poll_interval: int,
         max_poll_attempts: int,
     ):
+        """
+        Инициализация генератора изображений Fusion Brain.
+        
+        Args:
+            api_key (str): API ключ для доступа к Fusion Brain
+            secret_key (str): Секретный ключ для авторизации
+            api_url (str): Базовый URL API сервиса
+            pipeline_id (str): ID пайплайна для генерации
+            timeout (int): Таймаут HTTP запросов в секундах
+            poll_interval (int): Интервал проверки статуса в секундах
+            max_poll_attempts (int): Максимальное количество попыток
+        """
         self.api_key = api_key
         self.secret_key = secret_key
         self.api_url = api_url.rstrip("/")
@@ -58,17 +127,30 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
 
     @property
     def model_name(self) -> str:
+        """
+        Возвращает название модели генератора.
+        
+        Returns:
+            str: "Fusion Brain (Kandinski)"
+        """
         return "Fusion Brain (Kandinski)"
 
     def _get_auth_headers(self) -> Dict[str, str]:
         """
         Формирует заголовки авторизации для Fusion Brain API.
         
-        Fusion Brain использует заголовки X-Key и X-Secret с префиксами "Key " и "Secret ".
-        Если получаете 401 ошибку, проверьте:
-        1. Правильность API ключа и Secret ключа
-        2. Не истек ли срок действия ключей
-        3. Что ключи активированы в личном кабинете Fusion Brain
+        Fusion Brain использует специальный формат заголовков:
+        - X-Key с префиксом "Key "
+        - X-Secret с префиксом "Secret "
+        
+        Returns:
+            Dict[str, str]: Словарь с заголовками авторизации
+            
+        Note:
+            Если получаете 401 ошибку, проверьте:
+            1. Правильность API ключа и Secret ключа
+            2. Не истек ли срок действия ключей
+            3. Что ключи активированы в личном кабинете Fusion Brain
         """
         headers = {
             "X-Key": f"Key {self.api_key}",
@@ -81,8 +163,15 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         """
         Получает ID доступного пайплайна для генерации.
         
+        Запрашивает список доступных пайплайнов у API и возвращает
+        ID первого доступного. Используется для динамического
+        определения pipeline_id если он не был установлен.
+        
         Returns:
-            ID первого доступного пайплайна или None в случае ошибки
+            Optional[str]: ID первого доступного пайплайна или None при ошибке
+            
+        Note:
+            Метод логирует результат для отладки проблем с API
         """
         headers = self._get_auth_headers()
         
@@ -120,11 +209,22 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         """
         Запускает генерацию изображения и возвращает UUID задачи.
         
+        Инициирует процесс генерации изображения через Fusion Brain API
+        с заданными параметрами. Автоматически получает pipeline_id если
+        он не был установлен.
+        
         Args:
-            prompt: Текстовое описание изображения
-            width: Ширина изображения
-            height: Высота изображения
-            images: Количество изображений
+            prompt (str): Текстовое описание изображения
+            width (int): Ширина изображения в пикселях
+            height (int): Высота изображения в пикселях
+            images (int): Количество изображений для генерации
+            negative_prompt (Optional[str]): Негативный промпт для исключения элементов
+            
+        Returns:
+            str: UUID задачи генерации для отслеживания статуса
+            
+        Raises:
+            Exception: При ошибке запуска генерации или недоступности API
         """
         negative_prompt = ("размыто, низкое качество, плохая анатомия, искажения, артефакты, водяной знак, "
                            "текст, подпись, обрезано, уродливо, пикселизация")
@@ -175,7 +275,7 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
                         logger.error(f"Используемые заголовки: X-Key={self.api_key[:10]}..., X-Secret={self.secret_key[:10]}...")
                         raise Exception(f"{self.model_name} API error 401: Unauthorized. Проверьте правильность API ключей и Secret ключа.")
                     
-                    if response.status != 200 and response.status - 200 > 99:  # Костылек)
+                    if response.status != 200 and response.status - 200 > 99:  # Костылек
                         logger.error(f"Ошибка API {self.model_name}: {response.status}, {response_text}")
                         raise Exception(f"{self.model_name} API error {response.status}: {response_text}")
                     
@@ -206,7 +306,21 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
             raise
 
     async def _check_status(self, uuid: str) -> Dict:
-        """Проверяет статус генерации по UUID."""
+        """
+        Проверяет статус генерации по UUID.
+        
+        Запрашивает текущий статус задачи генерации у API
+        и возвращает данные о состоянии.
+        
+        Args:
+            uuid (str): UUID задачи генерации
+            
+        Returns:
+            Dict: Данные о статусе генерации
+            
+        Raises:
+            Exception: При ошибке проверки статуса или проблемах с API
+        """
         headers = self._get_auth_headers()
         
         try:
@@ -237,7 +351,21 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
             raise Exception(f"Ошибка сети при проверке статуса {self.model_name}: {str(e)}")
 
     async def _wait_for_completion(self, uuid: str) -> Dict:
-        """Ожидает завершения генерации и возвращает результат."""
+        """
+        Ожидает завершения генерации и возвращает результат.
+        
+        Использует polling механизм для мониторинга статуса генерации
+        с настраиваемыми интервалами проверки и максимальным количеством попыток.
+        
+        Args:
+            uuid (str): UUID задачи генерации
+            
+        Returns:
+            Dict: Данные о завершенной генерации с результатами
+            
+        Raises:
+            Exception: При ошибке генерации или превышении времени ожидания
+        """
         logger.info(f"Ожидание завершения генерации, UUID: {uuid}")
         
         for attempt in range(self.max_poll_attempts):
@@ -259,7 +387,21 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         raise Exception(f"Превышено максимальное время ожидания генерации изображения (UUID: {uuid})")
 
     async def _get_image_bytes(self, image_base64: str) -> bytes:
-        """Конвертирует base64 строку в байты изображения."""
+        """
+        Конвертирует base64 строку в байты изображения.
+        
+        Обрабатывает base64 данные изображения, убирает префиксы
+        и конвертирует в байты для дальнейшего использования.
+        
+        Args:
+            image_base64 (str): Строка с изображением в формате base64
+            
+        Returns:
+            bytes: Байты изображения
+            
+        Raises:
+            Exception: При ошибке декодирования base64 данных
+        """
         try:
             # Убираем префикс data:image/...;base64, если есть
             if ',' in image_base64:
@@ -271,41 +413,46 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
             logger.error(f"Ошибка декодирования base64 изображения: {e}")
             raise Exception(f"Ошибка декодирования изображения: {str(e)}")
 
-    async def generate(
+    async def generate_image(
         self,
         prompt: str,
-        width: int = 1024,
-        height: int = 1024,
-        images: int = 1,
+        dimensions: Dimensions,
     ) -> bytes:
         """
-        Генерирует изображение по промпту.
+        Генерирует изображение по текстовому описанию.
         
         Args:
-            prompt: Текстовое описание изображения
-            width: Ширина изображения в пикселях
-            height: Высота изображения в пикселях
-            images: Количество изображений (по умолчанию 1)
-        
-        Returns:
-            bytes: Байты сгенерированного изображения (PNG)
-        """
-        sections = [f"{prompt}"]
+            prompt (str): Текстовое описание желаемого изображения
+            dimensions (Dimensions): Ширина и высота изображения в пикселях
 
-        # Предобработка промпта, временное решение, позже нужно сделать полноценный prompt builder
-        sections.extend(
-            [
+        Returns:
+            bytes: Байты сгенерированного изображения в формате PNG
+
+        Raises:
+            Exception: При ошибке генерации изображения или недоступности API
+
+        Note:
+            Включает базовую предобработку промпта для улучшения качества генерации.
+            Для более сложной обработки рекомендуется использовать отдельный prompt builder.
+        """
+
+        sections = [prompt]
+
+        sections.extend([
                 "качественное изображение, профессиональное фото, 4k, 8k, гиперреализм, высокая детализация, ",
                 "f/1.8, боке, фотореалистичность, ISO 100, реальное изображение, ",
                 "кинематографичное освещение, объемный свет, студийный свет, мягкое свечение, ray tracing"
-            ]
-        )
+            ])
 
         people_keys = ["человек", "люди", "мужчина", "женщина", "ребенок"]  # Переделать
         if any(word in prompt for word in people_keys):
             sections.append(", у людей нормальные руки и ноги, люди изображены отчетливо. ")
 
         prompt = "\n".join(sections).strip()
+
+        width = dimensions.width
+        height = dimensions.height
+        images = 1
 
         # Запускаем генерацию
         uuid = await self._start_generation(prompt, width, height, images)
@@ -327,22 +474,4 @@ class FusionBrainImageGenerator(AbstractImageGenerator):
         logger.info(f"Успешно сгенерировано изображение, размер: {len(image_bytes)} байт")
         return image_bytes
 
-
-def create_fusion_brain_image_generator() -> FusionBrainImageGenerator:
-    """Фабричная функция для создания генератора изображений Fusion Brain."""
-    from config import config
-    if not config.FUSION_BRAIN_API_KEY or not config.FUSION_BRAIN_SECRET_KEY:
-        raise ValueError(
-            "FUSION_BRAIN_API_KEY и FUSION_BRAIN_SECRET_KEY должны быть установлены в .env файле"
-        )
-    
-    return FusionBrainImageGenerator(
-        api_key=config.FUSION_BRAIN_API_KEY,
-        secret_key=config.FUSION_BRAIN_SECRET_KEY,
-        api_url=config.FUSION_BRAIN_API_URL,
-        pipeline_id="",  # Будет получен динамически при первой генерации
-        timeout=config.FUSION_BRAIN_TIMEOUT,
-        poll_interval=config.FUSION_BRAIN_POLL_INTERVAL,
-        max_poll_attempts=config.FUSION_BRAIN_MAX_POLL_ATTEMPTS,
-    )
 

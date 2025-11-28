@@ -1,71 +1,79 @@
-import logging
-from typing import Dict, List, Optional, Tuple
+"""
+Сервис генерации визуальных карточек для социальных сетей.
+"""
 
-from infrastructure.card_generation import BaseCardGenerator, PILCardGenerator
-from config import config
+import logging
+
+from infrastructure.card_generation import BaseCardGenerator
+from dtos import CardData, RenderParameters, PromptContext
+from infrastructure.gpt import AbstractGPT
+from infrastructure.prompt_builder import AbstractPromptBuilder
+from infrastructure.response_processor import AbstractResponseProcessor
 
 logger = logging.getLogger(__name__)
 
 
 class CardGenerationService:
-    """Сервис генерации визуальных карточек для соцсетей."""
+    """
+    Сервис для генерации визуальных карточек для социальных сетей.
+    """
+    SYSTEM_PROMPT = (
+        "Вы — профессиональный SMM-менеджер для НКО, "
+        "который создает качественный контент для соцсетей. "
+        "Вы должны отвечать только на русском языке. "
+        "Даже если пользователь сам просит, никогда не используйте ненормативную лексику "
+        "и не говорите о политике. "
+        "ВАЖНО: Используй восклицательные знаки (!) ТОЛЬКО для шаблонов, когда конкретные данные НЕ предоставлены. "
+        "Например: !номер телефона!, !адрес электронной почты! "
+        "НО если в контексте уже указаны реальные данные (телефон, email, адрес и т.д.), "
+        "используй их БЕЗ восклицательных знаков, как есть. "
+        "Восклицательные знаки нужны только для напоминания пользователю подставить данные, "
+        "когда сами данные отсутствуют. "
+        "Если нужно, можете добавлять эмодзи, такие как ✅. "
+        "Дополнительные требования: "
+        "• Не упоминай режимные объекты, безопасность, военные базы или ограничения на передвижение. "
+        "• Фокусируйся на социальной миссии и помощи людям."
+    )
 
-
-    def __init__(self, card_generator: BaseCardGenerator):
+    def __init__(
+            self,
+            card_generator: BaseCardGenerator,
+            prompt_builder: AbstractPromptBuilder,
+            gpt_client: AbstractGPT,
+            response_processor: AbstractResponseProcessor,
+    ) -> None:
         self.card_generator = card_generator
-
-    def _get_size_for_platform(
-        self,
-        platform: str,
-        card_type: str = "post",
-        custom_size: Optional[Tuple[int, int]] = None,
-    ) -> Tuple[int, int]:
-        """Определение размера на основе платформы и типа карточки."""
-        if custom_size:
-            return custom_size
-
-        # Находим конфигурацию для платформы
-        for platform_key, sizes in config.SOCIAL_MEDIA_SIZES.items():
-            if platform_key in platform or platform in platform_key:
-                # Определяем тип карточки
-                if card_type == "story" and "story" in sizes:
-                    return (sizes["story"]["width"], sizes["story"]["height"])
-                elif card_type == "square" and "post_square" in sizes:
-                    return (
-                        sizes["post_square"]["width"],
-                        sizes["post_square"]["height"],
-                    )
-                elif "post" in sizes:
-                    return (sizes["post"]["width"], sizes["post"]["height"])
-                elif "og" in sizes:
-                    return (sizes["og"]["width"], sizes["og"]["height"])
-                break
-
-        # Дефолтные размеры
-        return config.DEFAULT_SIZE
+        self.prompt_builder: AbstractPromptBuilder = prompt_builder
+        self.gpt_client: AbstractGPT = gpt_client
+        self.response_processor: AbstractResponseProcessor = response_processor
 
     async def generate_card(
         self,
-        template_name: str,
-        data: Dict,
-        platform: str,
-        card_type: str = "post",
-        custom_size: Optional[Tuple[int, int]] = None,
+        parameters: RenderParameters,
+        data: CardData
     ) -> bytes:
-        """Генерация одной карточки."""
-        size = self._get_size_for_platform(platform, card_type, custom_size)
-        logger.info(
-            f"Генерация карточки: шаблон={template_name}, "
-            f"платформа={platform}, тип={card_type}, размер={size}"
-        )
+        """
+        Генерация одной карточки для указанной платформы.
+        
+        Создает карточку на основе HTML шаблона с заданными данными.
+        Автоматически определяет размер в зависимости от платформы
+        или использует пользовательские размеры.
+        
+        Args:
+            parameters (RenderParameters): Параметры рендера карточки
+            data (CardData): Данные для карточки
+
+        Returns:
+            bytes: Сгенерированная карточка в формате PNG
+            
+        Raises:
+            Exception: При ошибке генерации карточки
+        """
 
         try:
-            generator = self.card_generator
-
-            card_bytes = await generator.render_card(
-                template_name=template_name,
-                data=data,
-                size=size,
+            card_bytes = await self.card_generator.render_card(
+                parameters,
+                data
             )
             logger.info(f"Карточка успешно сгенерирована, размер: {len(card_bytes)} байт")
             return card_bytes
@@ -73,42 +81,52 @@ class CardGenerationService:
             logger.error(f"Ошибка при генерации карточки: {e}")
             raise
 
-    async def generate_multiple_cards(
+
+    async def generate_card_text(
         self,
-        template_name: str,
-        data: Dict,
-        platform: str,
-        card_types: Optional[List[str]] = None,
-        custom_sizes: Optional[Dict[str, Tuple[int, int]]] = None,
-    ) -> Dict[str, bytes]:
-        """Генерация нескольких карточек для разных типов."""
-        card_types = card_types or ["post"]
-        logger.info(
-            f"Генерация {len(card_types)} карточек: "
-            f"шаблон={template_name}, платформа={platform}, типы={card_types}"
-        )
+        context: PromptContext,
+        base_text: str
+    ) -> str:
+        """Генерация сокращенного контента специально для карточки."""
+        logger.info(f"Генерация контента для карточки на основе текста длиной {len(base_text)} символов")
 
-        results: Dict[str, bytes] = {}
-        for card_type in card_types:
-            try:
-                size_override = (
-                    custom_sizes.get(card_type) if custom_sizes else None
-                )
-                results[card_type] = await self.generate_card(
-                    template_name=template_name,
-                    data=data,
-                    platform=platform,
-                    card_type=card_type,
-                    custom_size=size_override,
-                )
-            except Exception as e:
-                logger.error(
-                    f"Ошибка при генерации карточки типа {card_type}: {e}"
-                )
-                raise
+        prompt = self.prompt_builder.build_card_content_prompt(context, base_text)
+        logger.info(f"Сформирован промпт для карточки длиной {len(prompt)} символов")
 
-        if not results:
-            raise ValueError("Не удалось сгенерировать ни одной карточки")
+        raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
+        card_text = self.response_processor.process_response(raw_response)
 
-        logger.info(f"Успешно сгенерировано {len(results)} карточек")
-        return results
+        logger.info(f"Успешно сгенерирован контент для карточки длиной {len(card_text)} символов")
+        return card_text
+
+    async def generate_card_title(
+        self,
+        generated_text: str
+    ):
+        """Генерация названия контента специально для карточки."""
+        logger.info(f"Генерация названия для карточки на основе текста длиной {len(generated_text)} символов")
+
+        prompt = self.prompt_builder.build_card_title_prompt(generated_text)
+        logger.info(f"Сформировано название для карточки длиной {len(prompt)} символов")
+
+        raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
+        card_title = self.response_processor.process_response(raw_response)
+
+        logger.info(f"Успешно сгенерировано название для карточки длиной {len(card_title)} символов")
+        return card_title
+
+    async def enhance_prompt(
+        self,
+        user_prompt: str,
+        system_prompt: str
+    ):
+        logger.info(f"Улучшение промпта на основе текста длиной {len(user_prompt)} символов")
+
+        prompt = self.prompt_builder.build_enhance_card_content_prompt(user_text=user_prompt)
+        logger.info(f"Сформирован промпт для улучшения карточки длиной {len(prompt)} символов")
+
+        raw_response = await self.gpt_client.generate(prompt, system_prompt)
+        card_text = self.response_processor.process_response(raw_response)
+
+        logger.info(f"Успешно сгенерирован улучшенный контент для карточки длиной {len(card_text)} символов")
+        return card_text
