@@ -14,6 +14,7 @@ from bot.states import EditText
 
 from dtos import EditPromptContext
 
+from models import Ngo
 
 text_editing_router = Router(name="text_editing")
 logger = logging.getLogger(__name__)
@@ -48,15 +49,14 @@ async def text_handler(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
     if ngo_service.ngo_exists(user_id):
-        ngo_data = ngo_service.get_ngo_data_by_user_id(user_id)
-        if ngo_data:
-            await state.update_data(
-                has_ngo_info=True,
-                ngo_name=ngo_data.get("ngo_name", ""),
-                ngo_description=ngo_data.get("ngo_description", ""),
-                ngo_activities=ngo_data.get("ngo_activities", ""),
-                ngo_contact=ngo_data.get("ngo_contact", ""),
-            )
+        ngo_data: Ngo = ngo_service.get_ngo_data_by_user_id(user_id)
+        await state.update_data(
+            has_ngo_info=True,
+            ngo_name=ngo_data.name,
+            ngo_description=ngo_data.description,
+            ngo_activities=ngo_data.activities,
+            ngo_contact=ngo_data.contacts,
+        )
 
     await message.answer(
         "✒️ **Уточнение для редактирования**\n\n"

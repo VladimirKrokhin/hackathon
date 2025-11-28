@@ -904,7 +904,8 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
 
     try:
         # Получаем сервис генерации текста для улучшения промпта
-        text_generation_service = dispatcher["text_content_generation_service"]
+        text_generation_service: TextGenerationService = dispatcher["text_content_generation_service"]
+        card_generation_service: CardGenerationService = dispatcher["card_generation_service"]
 
         # Системный промпт для улучшения промпта изображений
         system_prompt = (
@@ -926,8 +927,9 @@ async def wizard_image_prompt_handler(message: Message, state: FSMContext):
 
         # Вызываем GPT для улучшения промпта
         logger.info(f"Начинаю улучшение промпта: '{image_prompt}'")
-        raw_response = await text_generation_service.gpt_client.generate_image(user_prompt, system_prompt)
-        enhanced_prompt = text_generation_service.response_processor.process_response(raw_response)
+
+        # FIXME: улучши промпт
+        enhanced_prompt = await card_generation_service.enhance_prompt(user_prompt, system_prompt)
 
         # Сохраняем улучшенный промпт
         await state.update_data(enhanced_image_prompt=enhanced_prompt)
