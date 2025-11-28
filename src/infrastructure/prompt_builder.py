@@ -212,6 +212,15 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
 
+    def build_card_title_prompt(self, generated_text: str) -> str:
+        sections = ["Задача: Создай короткий, привлекательный заголовок (5-7 слов) для информационной карточки НКО.",
+                    "Заголовок должен быть ярким, мотивирующим и побуждать к участию. ",
+                    "НИ В КОЕМ СЛУЧАЕ добавляй кавычки, одиночные звездочки '*' и одиночные подчеркивания '_' в ответе",
+                    f"Для генерации основывайся на тексте поста: {generated_text}\n\n"]
+
+        prompt = "\n".join(sections)
+        return prompt
+
     def build_enhance_card_content_prompt(self, user_text: str) -> str:
         sections = ["Задача: улучшить содержание информационной карточки для поста в соцсети.",
                     f"Вот текст, который нужно улучшить: {user_text}"]

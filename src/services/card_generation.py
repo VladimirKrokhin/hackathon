@@ -99,6 +99,22 @@ class CardGenerationService:
         logger.info(f"Успешно сгенерирован контент для карточки длиной {len(card_text)} символов")
         return card_text
 
+    async def generate_card_title(
+        self,
+        generated_text: str
+    ):
+        """Генерация названия контента специально для карточки."""
+        logger.info(f"Генерация названия для карточки на основе текста длиной {len(generated_text)} символов")
+
+        prompt = self.prompt_builder.build_card_title_prompt(generated_text)
+        logger.info(f"Сформировано название для карточки длиной {len(prompt)} символов")
+
+        raw_response = await self.gpt_client.generate(prompt, self.SYSTEM_PROMPT)
+        card_title = self.response_processor.process_response(raw_response)
+
+        logger.info(f"Успешно сгенерировано название для карточки длиной {len(card_title)} символов")
+        return card_title
+
     async def enhance_prompt(
         self,
         user_prompt: str,
