@@ -16,6 +16,7 @@ from typing import Tuple, List
 import re
 import io
 from PIL import Image, ImageDraw, ImageFont, ImageColor
+from aiogram.types import FSInputFile
 
 from dtos import CardData, RenderParameters, Dimensions
 
@@ -314,23 +315,6 @@ class PillowCardGenerator(BaseCardGenerator):
         try:
 
             # Получение данных с значениями по умолчанию
-            defaults = {
-                'title': 'Контент от НКО',
-                'subtitle': '',
-                'content': '',
-                'footer': 'НКО',
-                'primary_color': '#667eea',
-                'secondary_color': '#764ba2',
-                'text_color': '#333',
-                'background_color': '#f5f7fa',
-                'org_name': 'НКО',
-                'contact_info': '',
-                'stats': [],
-                'cta_text': '',
-                'cta_link': '#'
-            }
-
-            template_data = {**defaults, **data}
 
             logger.info(f"Генерация карточки PIL.")
 
@@ -345,40 +329,20 @@ class PillowCardGenerator(BaseCardGenerator):
             # 1. ФОН - Градиент или фоновое изображение
             gradient_bg = self._create_gradient_background(
                 width, height,
-                template_data['primary_color'],
-                template_data['secondary_color']
+                '#667eea',
+                '#764ba2',
             )
 
             # Проверка background_image_bytes и background_image_url
-            background_img = None
-            if template_data.get('background_image_bytes'):
-                try:
-                    bg_bytes = template_data['background_image_bytes']
-                    background_img = Image.open(io.BytesIO(bg_bytes))
-                    background_img = background_img.convert('RGBA').resize((width, height), Image.LANCZOS if hasattr(Image, 'LANCZOS') else Image.ANTIALIAS)
-                    logger.info("Фоновое изображение обработано из bytes")
-                except Exception as e:
-                    logger.warning(f"Ошибка обработки фонового изображения из bytes: {e}")
-            elif template_data.get('background_image_url'):
-                try:
-                    bg_path = Path(template_data['background_image_url'])
-                    if bg_path.exists():
-                        background_img = Image.open(bg_path).convert('RGBA')
-                        background_img = background_img.resize((width, height), Image.LANCZOS if hasattr(Image, 'LANCZOS') else Image.ANTIALIAS)
-                        logger.info("Фоновое изображение обработано из URL/пути")
-                except Exception as e:
-                    logger.warning(f"Ошибка загрузки фонового изображения: {e}")
+            background_img = data.image
 
             # Наложение фонового изображения на градиент
-            if background_img:
-                img.paste(gradient_bg, (0, 0))
-                img.paste(background_img, (0, 0))
+            img.paste(gradient_bg)
+            img.paste(background_img, (0, 0))
 
-                # Создание темного оверлея для читаемости текста (40% opacity)
-                overlay = Image.new('RGBA', (width, height), (0, 0, 0, 102))
-                img = Image.alpha_composite(img, overlay)
-            else:
-                img.paste(gradient_bg, (0, 0))
+            # Создание темного оверлея для читаемости текста (40% opacity)
+            overlay = Image.new('RGBA', (width, height), (0, 0, 0, 102))
+            img = Image.alpha_composite(img, overlay)
 
             draw = ImageDraw.Draw(img)
 
@@ -404,10 +368,10 @@ class PillowCardGenerator(BaseCardGenerator):
             current_y = content_y
 
             # 3. ЗАГОЛОВОК
-            if template_data.get('title'):
+            if data.title:
                 title_font = self._get_font(48, bold=True)
-                title_lines = self._wrap_text(template_data['title'], title_font, content_width)
-                title_color = self._hex_to_rgb(template_data['primary_color'])
+                title_lines = self._wrap_text(data.title, title_font, content_width)
+                title_color = self._hex_to_rgb('#667eea')
 
                 self._draw_multiline_text(
                     draw, title_lines,
@@ -419,127 +383,34 @@ class PillowCardGenerator(BaseCardGenerator):
                 title_height = (title_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 10)
                 current_y += title_height + 15
 
-            # 4. ПОДЗАГОЛОВОК
-            if template_data.get('subtitle'):
-                subtitle_font = self._get_font(28)
-                subtitle_lines = self._wrap_text(template_data['subtitle'], subtitle_font, content_width)
-                subtitle_color = (120, 120, 120)
+            # # 5. ОСНОВНОЙ КОНТЕНТ с поддержкой Markdown
+            # if template_data.get('content'):
+            #     content_font = self._get_font(24)
+            #     content_lines = self._format_markdown_text(template_data['content'], content_font, content_width)
+            #     content_color = self._hex_to_rgb(template_data['text_color'])
+            #
+            #     self._draw_formatted_multiline_text(
+            #         draw, content_lines,
+            #         (content_x, current_y),
+            #         content_font, content_color
+            #     )
+            #
+            #     content_height = len(content_lines) * (content_font.getbbox("Ag")[3] - content_font.getbbox("Ag")[1] + 8)
+            #     current_y += content_height + 35
 
-                self._draw_multiline_text(
-                    draw, subtitle_lines,
-                    (content_x, current_y),
-                    subtitle_font, subtitle_color
-                )
-
-                bbox = subtitle_font.getbbox("Ag")
-                subtitle_height = (subtitle_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 8)
-                current_y += subtitle_height + 25
-
-            # 5. ОСНОВНОЙ КОНТЕНТ с поддержкой Markdown
-            if template_data.get('content'):
-                content_font = self._get_font(24)
-                content_lines = self._format_markdown_text(template_data['content'], content_font, content_width)
-                content_color = self._hex_to_rgb(template_data['text_color'])
-
-                self._draw_formatted_multiline_text(
-                    draw, content_lines,
-                    (content_x, current_y),
-                    content_font, content_color
-                )
-
-                content_height = len(content_lines) * (content_font.getbbox("Ag")[3] - content_font.getbbox("Ag")[1] + 8)
-                current_y += content_height + 35
-
-            # 6. СТАТИСТИКА (сетка)
-            stats = template_data.get('stats', [])
-            if stats:
-                stat_card_width = min(200, content_width // 2 - 10)
-                stat_card_height = 80
-
-                # Вычисление сетки
-                items_per_row = max(1, content_width // (stat_card_width + 10))
-                current_stat_x = content_x
-
-                for i, stat in enumerate(stats[:6]):  # Максимум 6 элементов
-                    if i > 0 and i % items_per_row == 0:
-                        current_stat_x = content_x
-                        current_y += stat_card_height + 10
-
-                    # Карточка статистики
-                    stat_bg = Image.new('RGBA', (stat_card_width, stat_card_height),
-                                      (248, 249, 250, 200))
-                    img.paste(stat_bg, (current_stat_x, current_y), stat_bg)
-
-                    # Число
-                    number_font = self._get_font(48, bold=True)
-                    number_color = self._hex_to_rgb(template_data['primary_color'])
-                    number_bbox = number_font.getbbox(stat.get('number', '0'))
-                    number_x = current_stat_x + stat_card_width // 2 - (number_bbox[2] - number_bbox[0]) // 2
-                    number_y = current_y + 10
-                    draw.text((number_x, number_y), str(stat.get('number', '0')),
-                            font=number_font, fill=number_color)
-
-                    # Лейбл
-                    label_font = self._get_font(18)
-                    label_text = self._wrap_text(stat.get('label', ''), label_font, stat_card_width - 10)
-                    label_x = current_stat_x + stat_card_width // 2
-                    label_y = current_y + 55
-                    self._draw_multiline_text(
-                        draw, label_text, (label_x, label_y),
-                        label_font, (102, 102, 102), anchor="mt"
-                    )
-
-                    current_stat_x += stat_card_width + 10
-
-                current_y += stat_card_height + 20
-
-            # 7. CTA КНОПКА
-            if template_data.get('cta_text'):
-                button_width = 300
-                button_height = 50
-                button_x = content_x + (content_width - button_width) // 2
-                button_y = current_y
-
-                # Кнопка с градиентом
-                button_gradient = self._create_gradient_background(
-                    button_width, button_height,
-                    template_data['primary_color'],
-                    template_data['secondary_color']
-                )
-
-                # Закругленные углы
-                mask = Image.new('L', (button_width, button_height), 0)
-                mask_draw = ImageDraw.Draw(mask)
-                mask_draw.rounded_rectangle([(0, 0), (button_width, button_height)], 25, fill=255)
-                button_img = Image.new('RGBA', (button_width, button_height))
-                button_img.paste(button_gradient, (0, 0))
-                img.paste(button_img, (button_x, button_y), mask)
-
-                # Текст кнопки
-                button_font = self._get_font(20, bold=True)
-                bbox = button_font.getbbox(template_data['cta_text'])
-                text_width = bbox[2] - bbox[0]
-                text_x = button_x + button_width // 2 - text_width // 2
-                text_y = button_y + button_height // 2 - (bbox[3] - bbox[1]) // 2 + 2
-
-                draw.text((text_x, text_y), template_data['cta_text'],
-                        font=button_font, fill=(255, 255, 255))
-
-                current_y += button_height + 20
 
             # 8. FOOTER
             footer_font = self._get_font(20)
-            footer_color = self._hex_to_rgb(template_data['primary_color'])
-            footer_text = template_data.get('org_name', 'НКО')
-            if template_data.get('contact_info'):
-                footer_text += f" • {template_data['contact_info']}"
+            footer_color = self._hex_to_rgb('#667eea')
+            footer_text = data.ngo_data.name
+
 
             footer_lines = self._wrap_text(footer_text, footer_font, content_width)
 
             # Позиция футера - внизу карточки
             bbox = footer_font.getbbox("Ag")
             footer_height = (footer_lines.count('\n') + 1) * (bbox[3] - bbox[1] + 4)
-            footer_y = card_y + card_height - footer_height - 15
+            footer_y = round((card_y + card_height - footer_height - 15))
 
             footer_x = content_x + content_width // 2
             self._draw_multiline_text(

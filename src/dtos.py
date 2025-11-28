@@ -26,7 +26,7 @@ class NgoData:
 
 @dataclass(frozen=True)
 class CardData:
-    image: FSInputFile
+    image: bytes
     title: str
     ngo_data: Optional[NgoData]
     event_data: Optional[EventData]

@@ -1228,7 +1228,7 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
 
 
         # Получаем изображение (уже должно быть сгенерировано на предыдущих этапах)
-        generated_image = None
+        generated_image: bytes = None
         image_source = data["image_source"]
         if image_source == "🤖 Сгенерировать ИИ":
             generated_image = data["generated_image"]
@@ -1287,10 +1287,9 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
         )
 
 
-        print(data)
 
 
-        title = await card_generation_service.generate_card_title(card_text_generation_context)
+        title = await card_generation_service.generate_card_title(generated_text)
 
         # Устанавливаем значения по умолчанию
         ngo_name = ngo_data.name
@@ -1299,9 +1298,9 @@ async def wizard_create_content_handler(callback: CallbackQuery, state: FSMConte
 
 
         event_data = EventData(
-            timestamp=None,
-            location=None,
-            audience=None,
+            timestamp=data['event_date'],
+            location=data["event_place"],
+            audience=data["event_audience"],
         )
 
 
@@ -1719,6 +1718,7 @@ async def wizard_regenerate_card_from_text(message: Message, state: FSMContext, 
         )
 
 
+# FIXME: используетсся?
 async def wizard_regenerate_card_handler_from_message(message: Message, state: FSMContext):
     """Перегенерация карточек из message handler'а."""
     await message.answer(
