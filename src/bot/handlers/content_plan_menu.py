@@ -83,9 +83,9 @@ async def create_content_plan_handler(callback: CallbackQuery, state: FSMContext
     await callback.answer()
 
     await callback.message.answer(
-        photo=CALENDAR_PHOTO,
-        caption="📅 Давайте создадим контент-план для ваших постов!\n\n"
+        text="📅 Давайте создадим контент-план для ваших постов!\n\n"
         "На какой период вы хотите подготовить план?",
+        photo=CALENDAR_PHOTO,
         reply_markup=PUBLICATION_TIME_INTERVAL_KEYBOARD,
     )
     await state.set_state(ContentPlanState.waiting_for_period)
@@ -268,7 +268,7 @@ async def view_plan_item_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(context=text)
     # Клавиатура действий
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✨ Сгенерировать текст поста", callback_data=f"cp_item_gen_{item.id_}")],
+        [InlineKeyboardButton(text="✨ Создать текст поста", callback_data=f"cp_item_gen_{item.id_}")],
         # Кнопка "Назад" должна возвращать в меню самого плана.
         # Нам нужен plan_id, он есть в item.content_plan_id
         [InlineKeyboardButton(text="⬅️ Назад к плану", callback_data=f"content_plan_manage_{item.content_plan_id}")]
@@ -306,7 +306,7 @@ async def generate_post_from_plan_handler(callback: CallbackQuery, state: FSMCon
         await callback.message.answer("❌ Ошибка: элемент плана не найден.")
         return
 
-    loading_msg = await callback.message.answer("🤖 *Генерирую текст...* Это может занять около 30 секунд.")
+    loading_msg = await callback.message.answer("🤖 *Создаю текст...* Это может занять около 30 секунд.")
 
     try:
         # Здесь использую описание из плана как цель. По хорошему нужно сделать отдельный dto
@@ -333,7 +333,7 @@ async def generate_post_from_plan_handler(callback: CallbackQuery, state: FSMCon
         await loading_msg.delete()
 
         await callback.message.answer(
-            "✅ *Сгенерированный пост:*\n\n",
+            "✅ *Созданный пост:*\n\n",
             parse_mode=ParseMode.MARKDOWN
         )
         await state.update_data(item_id=item.id_)
