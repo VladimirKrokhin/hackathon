@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums.parse_mode import ParseMode
 
+from bot.assets import TEXT_GENERATION_PHOTO
 from services.text_generation import TextGenerationService
 from services.ngo_service import NGOService
 
