@@ -7,7 +7,6 @@ from aiogram.types import Message, ReplyKeyboardRemove, InlineKeyboardMarkup, In
 from aiogram.enums.parse_mode import ParseMode
 
 from bot.assets import TEXT_GENERATION_PHOTO
-from bot.handlers.start import BACK_TO_START_KEYBOARD
 from services.text_generation import TextGenerationService
 from services.ngo_service import NGOService
 
@@ -17,6 +16,16 @@ from bot.states import ContentGeneration, EditText
 from dtos import EditPromptContext
 
 from models import Ngo
+
+
+BACK_TO_START_MENU_CALLBACK_DATA = "back_to_start_menu"
+
+BACK_TO_START_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Вернуться в главное меню", callback_data=BACK_TO_START_MENU_CALLBACK_DATA)],
+    ]
+)
+
 
 text_editing_router = Router(name="text_editing")
 logger = logging.getLogger(__name__)
