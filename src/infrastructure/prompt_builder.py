@@ -212,6 +212,20 @@ class YandexGPTPromptBuilder(AbstractPromptBuilder):
         prompt = "\n".join(sections)
         return textwrap.dedent(prompt).strip()
 
+    def build_enhance_card_content_prompt(self, user_text: str) -> str:
+        sections = ["Задача: улучшить содержание информационной карточки для поста в соцсети.",
+                    f"Вот текст, который нужно улучшить: {user_text}"]
+        sections.extend(
+            [
+                "Улучшенный текст должен привлекать внимание, но быть точным, без приукрашиваний!",
+                "ВАЖНО: улучшенный текст не должен быть длиннее одного предложения и не больше 7-8 слов!",
+            ]
+        )
+
+        prompt = "\n".join(sections)
+        return prompt
+
+
     def build_refactor_text_content_prompt(self, user_data: PromptContext, generated_post: str, user_text: str) -> str:
         """
         Создает промпт для рефакторинга и редактирования текстового контента.

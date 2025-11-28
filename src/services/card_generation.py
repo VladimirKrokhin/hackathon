@@ -98,3 +98,19 @@ class CardGenerationService:
 
         logger.info(f"Успешно сгенерирован контент для карточки длиной {len(card_text)} символов")
         return card_text
+
+    async def enhance_prompt(
+        self,
+        user_prompt: str,
+        system_prompt: str
+    ):
+        logger.info(f"Улучшение промпта на основе текста длиной {len(user_prompt)} символов")
+
+        prompt = self.prompt_builder.build_enhance_card_content_prompt(user_text=user_prompt)
+        logger.info(f"Сформирован промпт для улучшения карточки длиной {len(prompt)} символов")
+
+        raw_response = await self.gpt_client.generate(prompt, system_prompt)
+        card_text = self.response_processor.process_response(raw_response)
+
+        logger.info(f"Успешно сгенерирован улучшенный контент для карточки длиной {len(card_text)} символов")
+        return card_text
